@@ -1,6 +1,7 @@
 # Pushing a tag like v0.2.0 builds the Windows installer and the Android APK
-# and attaches both to a draft GitHub release, as IRIS-Setup-x64.exe and
-# IRIS-Android.apk (README's download buttons point at these names).
+# and attaches both to a draft GitHub release, named with the version
+# (IRIS-Setup-x64-v0.2.0.exe, IRIS-Android-v0.2.0.apk). scripts/publish-public.sh
+# points README's download buttons at them.
 name: Release
 
 on:
@@ -23,13 +24,12 @@ jobs:
           node-version: 22
       - run: ./scripts/build-windows.ps1
         shell: pwsh
-      # A fixed name, so README's download button always gets the latest one.
-      - run: Copy-Item (Get-ChildItem target/release/bundle/nsis/*-setup.exe | Select-Object -First 1) IRIS-Setup-x64.exe
+      - run: Copy-Item (Get-ChildItem target/release/bundle/nsis/*-setup.exe | Select-Object -First 1) "IRIS-Setup-x64-${{ github.ref_name }}.exe"
         shell: pwsh
       - uses: actions/upload-artifact@v4
         with:
           name: windows-installer
-          path: IRIS-Setup-x64.exe
+          path: IRIS-Setup-x64-*.exe
 
   android:
     runs-on: ubuntu-latest
@@ -56,11 +56,11 @@ jobs:
             "$PWD/android/release.jks" "$STORE_PASSWORD" "$KEY_ALIAS" "$KEY_PASSWORD" > android/keystore.properties
       - run: chmod +x gradlew && ./gradlew assembleRelease
         working-directory: android
-      - run: cp android/app/build/outputs/apk/release/app-release.apk IRIS-Android.apk
+      - run: cp android/app/build/outputs/apk/release/app-release.apk "IRIS-Android-${{ github.ref_name }}.apk"
       - uses: actions/upload-artifact@v4
         with:
           name: android-apk
-          path: IRIS-Android.apk
+          path: IRIS-Android-*.apk
 
   publish:
     needs: [windows, android]

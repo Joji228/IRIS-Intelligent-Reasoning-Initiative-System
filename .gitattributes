@@ -38,3 +38,4 @@ scripts/remote/click-and-shot.ps1 export-ignore
 scripts/remote/screenshot.ps1 export-ignore
 scripts/remote/ui.ps1 export-ignore
 scripts/remote/e2e-tools.ps1 export-ignore
+scripts/publish-public.sh export-ignore
