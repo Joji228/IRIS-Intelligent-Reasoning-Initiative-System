@@ -1,0 +1,45 @@
+# Rust
+target/
+
+# Node / frontend
+node_modules/
+dist/
+.svelte-kit/
+# The web app the relay serves (built from app/ by `npm run deploy` in relay/)
+relay/public/
+.vite/
+
+# Tauri
+app/src-tauri/gen/
+app/src-tauri/target/
+
+# Runtime data and secrets: never commit
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.*
+!.env.example
+!.env.link
+secrets/
+.iris-token
+.iris-manifest
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.log
+.ui-steps.tmp
+
+# Cloudflare relay build cache
+.wrangler/
+
+# Claude Code session state
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
+
+# Words the public export must never contain (one regex per line; local only)
+scripts/.private-patterns

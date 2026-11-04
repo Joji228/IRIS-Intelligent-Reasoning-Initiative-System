@@ -1,0 +1,40 @@
+# Normalize line endings in the repo; check out native per platform
+* text=auto
+
+# Windows scripts keep CRLF
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Shell scripts keep LF
+*.sh text eol=lf
+
+# Binary
+*.png binary
+*.ico binary
+*.icns binary
+
+# Kept out of the public copy (`git archive`, scripts/export-public.sh):
+# private planning notes and the scripts for building on a separate server.
+docs/AUDIT-*.md export-ignore
+docs/PLAN.md export-ignore
+docs/REMOTE-PLAN.md export-ignore
+docs/PRIVATE-WORKFLOW.md export-ignore
+.claude/** export-ignore
+scripts/.env.example export-ignore
+scripts/export-public.sh export-ignore
+scripts/lib.sh export-ignore
+scripts/sync.sh export-ignore
+scripts/build.sh export-ignore
+scripts/build-app.sh export-ignore
+scripts/install-app.sh export-ignore
+scripts/engine.sh export-ignore
+scripts/screenshot.sh export-ignore
+scripts/ui.sh export-ignore
+scripts/server-repo.sh export-ignore
+scripts/remote/apply-sync.ps1 export-ignore
+scripts/remote/prune.ps1 export-ignore
+scripts/remote/click-and-shot.ps1 export-ignore
+scripts/remote/screenshot.ps1 export-ignore
+scripts/remote/ui.ps1 export-ignore
+scripts/remote/e2e-tools.ps1 export-ignore

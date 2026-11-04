@@ -1,0 +1,404 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/jetbrains-mono';
+
+/* ---------------------------------------------------------------------------
+   I.R.I.S. design tokens. Dark first; light overrides below.
+   Colors are CSS variables so the theme can switch at runtime; Tailwind
+   utilities (bg-surface, text-muted, ...) map onto them via @theme.
+   ------------------------------------------------------------------------- */
+:root,
+[data-theme='dark'] {
+  --c-bg: #07070b;
+  --c-rail: #0b0b11;
+  --c-panel: #0f0f16;
+  --c-surface: #15151d;
+  --c-elevated: #1b1b26;
+  --c-hover: #21212d;
+  /* Chat bubbles: the agent's, and the user's own (violet). */
+  --c-bubble: #15151e;
+  --c-bubble-line: rgb(255 255 255 / 0.05);
+  --c-bubble-me: #6b46e5;
+  --c-on-bubble-me: #ffffff;
+  --c-line: rgb(255 255 255 / 0.07);
+  --c-line-strong: rgb(255 255 255 / 0.12);
+
+  --c-text: #ececf1;
+  --c-muted: #a3a3b8;
+  --c-faint: #6c6c82;
+
+  --c-accent: #8b5cf6;
+  --c-accent-hi: #a78bfa;
+  --c-accent-soft: rgb(139 92 246 / 0.14);
+  --c-on-accent: #ffffff;
+
+  --c-danger: #f87171;
+  --c-danger-soft: rgb(248 113 113 / 0.12);
+  --c-success: #34d399;
+  --c-warn: #fbbf24;
+
+  --c-code-bg: #0d0d14;
+  --shadow-pop: 0 12px 40px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(255 255 255 / 0.06);
+  color-scheme: dark;
+}
+
+[data-theme='light'] {
+  --c-bg: #f7f7fb;
+  --c-rail: #efeff6;
+  --c-panel: #f3f3f9;
+  --c-surface: #ffffff;
+  --c-elevated: #ffffff;
+  --c-hover: #e9e9f2;
+  --c-bubble: #ffffff;
+  --c-bubble-line: rgb(15 15 40 / 0.07);
+  --c-bubble-me: #7c3aed;
+  --c-on-bubble-me: #ffffff;
+  --c-line: rgb(15 15 40 / 0.08);
+  --c-line-strong: rgb(15 15 40 / 0.14);
+
+  --c-text: #17171f;
+  --c-muted: #55556b;
+  --c-faint: #8a8aa0;
+
+  --c-accent: #7c3aed;
+  --c-accent-hi: #6d28d9;
+  --c-accent-soft: rgb(124 58 237 / 0.1);
+
+  --c-danger: #dc2626;
+  --c-danger-soft: rgb(220 38 38 / 0.08);
+
+  --c-code-bg: #f4f4fa;
+  --shadow-pop: 0 12px 40px rgb(20 20 50 / 0.14), 0 0 0 1px rgb(15 15 40 / 0.08);
+  color-scheme: light;
+}
+
+@theme {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'Cascadia Code', Consolas, monospace;
+
+  --color-bg: var(--c-bg);
+  --color-rail: var(--c-rail);
+  --color-panel: var(--c-panel);
+  --color-surface: var(--c-surface);
+  --color-elevated: var(--c-elevated);
+  --color-hover: var(--c-hover);
+  --color-line: var(--c-line);
+  --color-line-strong: var(--c-line-strong);
+  --color-text: var(--c-text);
+  --color-muted: var(--c-muted);
+  --color-faint: var(--c-faint);
+  --color-accent: var(--c-accent);
+  --color-accent-hi: var(--c-accent-hi);
+  --color-accent-soft: var(--c-accent-soft);
+  --color-on-accent: var(--c-on-accent);
+  --color-danger: var(--c-danger);
+  --color-danger-soft: var(--c-danger-soft);
+  --color-success: var(--c-success);
+  --color-warn: var(--c-warn);
+  --color-code: var(--c-code-bg);
+  --color-bubble: var(--c-bubble);
+  --color-bubble-line: var(--c-bubble-line);
+  --color-bubble-me: var(--c-bubble-me);
+  --color-on-bubble-me: var(--c-on-bubble-me);
+
+  --animate-spin-slow: spin 2.4s linear infinite;
+  --animate-shimmer: shimmer 2.2s linear infinite;
+  --animate-fade-in: fade-in 160ms ease-out;
+  --animate-pop-in: pop-in 180ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+
+  @keyframes shimmer {
+    from { background-position: 0% 50%; }
+    to { background-position: 200% 50%; }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes pop-in {
+    from { opacity: 0; transform: scale(0.96); }
+    to { opacity: 1; transform: none; }
+  }
+}
+
+/* The Iris rainbow, used sparingly: logo, "working" rings, focus hairlines. */
+:root {
+  --rainbow: linear-gradient(90deg, #f472b6, #a78bfa, #60a5fa, #34d399, #fbbf24, #f472b6);
+  --rainbow-conic: conic-gradient(from 0deg, #f472b6, #a78bfa, #60a5fa, #34d399, #fbbf24, #f472b6);
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+/* Mobile browsers: the visible height, without the address bar. */
+#app {
+  height: 100dvh;
+}
+
+/* A column, so a connection bar can sit above the app. */
+#app {
+  display: flex;
+  flex-direction: column;
+}
+
+body {
+  margin: 0;
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Text the user may want to copy stays selectable. */
+.selectable,
+input,
+textarea {
+  user-select: text;
+}
+
+::selection {
+  background: rgb(139 92 246 / 0.35);
+}
+
+/* Slim scrollbars that only show on hover. */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.scroll-thin:hover {
+  scrollbar-color: var(--c-line-strong) transparent;
+}
+
+/* Scrolls, but never shows a scroll bar (the orb rail). */
+.scroll-none {
+  scrollbar-width: none;
+}
+.scroll-none::-webkit-scrollbar {
+  display: none;
+}
+
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: default;
+}
+
+/* Keyboard focus ring for buttons and links. Text fields show focus through
+   their border instead (and the composer through its rainbow hairline). */
+:focus-visible:not(input, textarea, select) {
+  outline: 2px solid var(--c-accent);
+  outline-offset: 2px;
+}
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+}
+
+.rainbow-text {
+  background: var(--rainbow);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Animated rainbow ring around an agent avatar while it is working. */
+.working-ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  padding: 2px;
+  /* A rainbow tail fading to nothing, so the spin is easy to see. */
+  background: conic-gradient(from 0deg, transparent 0deg, transparent 70deg, #f472b6 140deg, #a78bfa 200deg, #60a5fa 260deg, #34d399 310deg, #fbbf24 360deg);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: spin 1.6s linear infinite;
+  pointer-events: none;
+}
+
+/* Same specificity as .iris-tip would lose to its nowrap, so qualify it. */
+.iris-tip.iris-tip-wrap {
+  width: max-content;
+  max-width: 240px;
+  white-space: normal;
+  line-height: 1.45;
+}
+
+.iris-tip {
+  position: fixed;
+  z-index: 100;
+  padding: 5px 9px;
+  border-radius: 8px;
+  background: var(--c-elevated);
+  color: var(--c-text);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  box-shadow: var(--shadow-pop);
+  pointer-events: none;
+  animation: var(--animate-fade-in);
+}
+
+/* Pulsing amber ring: the agent is paused, waiting for the user's approval. */
+.waiting-ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  border: 2px solid var(--c-warn);
+  animation: waiting-pulse 1.4s ease-in-out infinite;
+  pointer-events: none;
+}
+/* Fades out and back while glowing outward: "your turn". */
+@keyframes waiting-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgb(251 191 36 / 0.55); }
+  50% { opacity: 0.2; box-shadow: 0 0 0 6px rgb(251 191 36 / 0); }
+}
+
+/* A message opened from chat search glows briefly. */
+.search-hit {
+  border-radius: 16px;
+  animation: search-hit 2.4s ease-out;
+}
+@keyframes search-hit {
+  0%, 30% { box-shadow: 0 0 0 3px var(--c-accent-soft), 0 0 0 5px var(--c-accent); }
+  100% { box-shadow: 0 0 0 3px transparent, 0 0 0 5px transparent; }
+}
+
+/* Shimmering text for "Thinking…" / "Working…" labels. */
+.shimmer {
+  background: linear-gradient(90deg, var(--c-faint) 0%, var(--c-text) 20%, var(--c-faint) 40%, var(--c-faint) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: var(--animate-shimmer);
+}
+
+/* ---- forms & buttons ----------------------------------------------------- */
+.label {
+  @apply mb-1.5 block text-[12.5px] font-medium text-muted;
+}
+.hint {
+  @apply mt-1.5 text-[12px] text-faint;
+}
+.input {
+  @apply w-full rounded-xl border border-line-strong bg-surface px-3.5 py-2.5 text-[14px] text-text outline-none transition placeholder:text-faint focus:border-accent/60;
+}
+@utility btn {
+  @apply inline-flex items-center justify-center gap-1.5 rounded-xl px-3.5 py-2 text-[13px] font-medium transition disabled:opacity-50;
+}
+.btn-primary {
+  @apply btn bg-accent text-on-accent hover:bg-accent-hi;
+}
+.btn-ghost {
+  @apply btn text-muted hover:bg-hover hover:text-text;
+}
+.btn-outline {
+  @apply btn border border-line-strong text-text hover:bg-hover;
+}
+.btn-danger {
+  @apply btn text-danger hover:bg-danger-soft;
+}
+
+/* ---- rendered Markdown in messages ------------------------------------- */
+.md {
+  line-height: 1.7;
+  font-size: 14.5px;
+  overflow-wrap: anywhere;
+}
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md p { margin: 0.7em 0; }
+.md h1, .md h2, .md h3, .md h4 {
+  font-weight: 650;
+  line-height: 1.3;
+  margin: 1.4em 0 0.6em;
+  letter-spacing: -0.01em;
+}
+.md h1 { font-size: 1.45em; }
+.md h2 { font-size: 1.25em; }
+.md h3 { font-size: 1.1em; }
+.md ul, .md ol { margin: 0.6em 0; padding-left: 1.5em; }
+.md ul { list-style: disc; }
+.md ol { list-style: decimal; }
+.md li { margin: 0.25em 0; }
+.md li::marker { color: var(--c-faint); }
+.md a { color: var(--c-accent-hi); text-decoration: underline; text-underline-offset: 2px; }
+.md strong { font-weight: 650; }
+.md blockquote {
+  margin: 0.8em 0;
+  padding: 0.1em 1em;
+  border-left: 3px solid var(--c-accent);
+  color: var(--c-muted);
+}
+.md hr { border: 0; border-top: 1px solid var(--c-line-strong); margin: 1.5em 0; }
+.md table { border-collapse: collapse; margin: 0.8em 0; font-size: 0.95em; display: block; overflow-x: auto; }
+.md th, .md td { border: 1px solid var(--c-line-strong); padding: 0.4em 0.75em; text-align: left; overflow-wrap: normal; }
+.md th { background: var(--c-elevated); font-weight: 600; }
+.md :not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--c-elevated);
+  border: 1px solid var(--c-line);
+  padding: 0.1em 0.35em;
+  border-radius: 6px;
+}
+.md .codeblock {
+  margin: 0.9em 0;
+  border: 1px solid var(--c-line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--c-code-bg);
+}
+.md .codeblock-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px 6px 14px;
+  font-size: 12px;
+  color: var(--c-faint);
+  border-bottom: 1px solid var(--c-line);
+  font-family: var(--font-mono);
+}
+.md .codeblock-head button {
+  color: var(--c-muted);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+.md .codeblock-head button:hover { background: var(--c-hover); color: var(--c-text); }
+.md pre {
+  margin: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* highlight.js tokens tuned to the palette */
+.hljs-comment, .hljs-quote { color: #6c6c82; font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-type { color: #c4b5fd; }
+.hljs-string, .hljs-regexp, .hljs-addition { color: #86efac; }
+.hljs-number, .hljs-symbol, .hljs-bullet { color: #fbbf24; }
+.hljs-title, .hljs-section, .hljs-title.function_ { color: #93c5fd; }
+.hljs-attr, .hljs-attribute, .hljs-variable, .hljs-template-variable, .hljs-property { color: #f9a8d4; }
+.hljs-built_in, .hljs-name, .hljs-meta { color: #67e8f9; }
+.hljs-deletion { color: #fca5a5; }
+[data-theme='light'] .hljs-keyword, [data-theme='light'] .hljs-type { color: #7c3aed; }
+[data-theme='light'] .hljs-string { color: #15803d; }
+[data-theme='light'] .hljs-number { color: #b45309; }
+[data-theme='light'] .hljs-title { color: #1d4ed8; }
+[data-theme='light'] .hljs-attr, [data-theme='light'] .hljs-property { color: #be185d; }
+[data-theme='light'] .hljs-built_in { color: #0e7490; }

@@ -1,0 +1,21 @@
+# I.R.I.S. Link relay (Cloudflare Workers, free plan).
+# Deploy: npm run deploy (builds the web app from app/ into public/, then wrangler deploy)   ·   Secret: npx wrangler secret put SERVER_KEY
+name = "iris"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+workers_dev = true
+# No account_id here: wrangler uses the account you logged in with (or
+# CLOUDFLARE_ACCOUNT_ID if your login can reach several).
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+[[durable_objects.bindings]]
+name = "HUB"
+class_name = "Hub"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Hub"]

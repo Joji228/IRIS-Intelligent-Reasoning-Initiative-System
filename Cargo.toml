@@ -1,0 +1,54 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "app/src-tauri"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+authors = ["Joji228"]
+
+[workspace.dependencies]
+iris-core = { path = "crates/core" }
+iris-providers = { path = "crates/providers" }
+
+anyhow = "1"
+axum = { version = "0.8", features = ["ws"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+dirs = "6"
+futures-util = "0.3"
+hex = "0.4"
+html2text = "0.17"
+scraper = "0.29"
+url = "2"
+# 0.12 with the OS TLS stack (SChannel on Windows): no CMake/NASM needed to build.
+regex = "1"
+base64 = "0.22"
+pdf-extract = "0.9"
+tokio-tungstenite = { version = "0.29", features = ["native-tls"] }
+# I.R.I.S. Link encryption (link.rs) and the PC login password hash.
+p256 = { version = "0.13", features = ["ecdh"] }
+hkdf = "0.12"
+aes-gcm = "0.10"
+argon2 = "0.5"
+rand_core = { version = "0.6", features = ["getrandom"] }
+tower = { version = "0.5", features = ["util"] }
+reqwest = { version = "0.12", default-features = false, features = ["native-tls", "json", "stream", "http2", "charset"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
+toml = "0.8"
+toml_edit = "0.22"
+tower-http = { version = "0.6", features = ["cors"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4", "v7", "serde"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 4
+strip = true

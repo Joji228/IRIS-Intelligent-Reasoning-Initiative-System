@@ -1,0 +1,39 @@
+{
+  "name": "iris-app",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "I.R.I.S. desktop app (Tauri 2 + Svelte 5)",
+  "license": "MIT",
+  "scripts": {
+    "build:web": "vite build --mode link --outDir ../relay/public --emptyOutDir",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@tauri-apps/api": "^2.12.4",
+    "@tauri-apps/plugin-opener": "^2.7.2",
+    "dompurify": "^3.4.17",
+    "highlight.js": "^11.12.0",
+    "marked": "^18.1.2",
+    "marked-highlight": "^2.2.4",
+    "uqr": "^0.1.2"
+  },
+  "devDependencies": {
+    "@lucide/svelte": "^1.66.0",
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "@tauri-apps/cli": "^2.12.4",
+    "@tsconfig/svelte": "^5.0.8",
+    "svelte": "^5.57.3",
+    "svelte-check": "^4.7.7",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~5.9",
+    "vite": "^8.3.5"
+  }
+}

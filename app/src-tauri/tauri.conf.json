@@ -1,0 +1,53 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "IRIS",
+  "version": "0.1.0",
+  "identifier": "dev.iris.desktop",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "I.R.I.S.",
+        "width": 1320,
+        "height": 840,
+        "minWidth": 940,
+        "minHeight": 600,
+        "center": true,
+        "maximized": true,
+        "visible": false,
+        "theme": "Dark",
+        "backgroundColor": "#0a0a0f"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:7700 ws://127.0.0.1:7700; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "publisher": "Joji228",
+    "copyright": "MIT License",
+    "category": "Productivity",
+    "shortDescription": "I.R.I.S. — Intelligent Reasoning & Initiative System",
+    "longDescription": "Self-hosted AI agents with a native chat app.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "externalBin": ["binaries/iris-engine"],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
+  }
+}

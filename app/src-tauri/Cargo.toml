@@ -1,0 +1,28 @@
+[package]
+name = "iris-desktop"
+description = "I.R.I.S. desktop app shell: window, tray, autostart and the bundled engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lib]
+# The library form is what Tauri's mobile builds use later (Android).
+name = "iris_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+dirs.workspace = true
+serde.workspace = true
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-autostart = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-single-instance = "2"
+tokio = { workspace = true, features = ["time"] }
+
+[target.'cfg(windows)'.dependencies]
+# Already in the tree via Tauri; used to detect when the taskbar exists.
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }

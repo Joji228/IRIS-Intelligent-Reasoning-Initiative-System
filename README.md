@@ -1,0 +1,94 @@
+<div align="center">
+
+# I.R.I.S.
+
+**Your own team of AI agents, running on your own PC.**<br>
+Chat with them from your desktop, any browser, or your Android phone.
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-8b5cf6)](LICENSE)
+![Windows 10/11](https://img.shields.io/badge/Windows-10%20%7C%2011-1c1c28)
+![Android](https://img.shields.io/badge/Android-10%2B-1c1c28)
+
+<img src="docs/screenshots/desktop-chat.png" alt="I.R.I.S. on the desktop: a chat with an agent that searched the web and compared products" width="900">
+
+</div>
+
+## What it is
+
+- **A team, not one bot.** **Iris**, your Chief of Staff, answers simple things herself and hands bigger jobs to specialists. Make your own with one sentence ("an agent that checks my websites every morning").
+- **Agents that actually do things.** They search and read the web, drive a real browser, work with files, run commands, keep your PC updated, and follow schedules: up to 10 agents, each with its own memory.
+- **You stay in charge.** Risky steps wait for your OK. Agents ask you questions as clickable cards. Anything that failed lands in one inbox with a Retry button.
+- **Private by design.** Everything runs and stays on your machine. Remote access is end-to-end encrypted through a relay you own.
+- **Any model.** DeepSeek by default, or any OpenAI-compatible provider (OpenAI, Groq, OpenRouter, a local server…).
+
+## See it
+
+| | |
+|---|---|
+| <img src="docs/screenshots/desktop-home.png" alt="Home: your agents at a glance" width="440"> | <img src="docs/screenshots/desktop-working.png" alt="An agent at work: its orb says what it's doing" width="440"> |
+| **Home.** Every agent at a glance. | **At work.** Each orb shows what it's doing, live. |
+| <img src="docs/screenshots/desktop-question.png" alt="An agent asking a question with clickable answers" width="440"> | <img src="docs/screenshots/desktop-chat.png" alt="A chat with web research and a comparison table" width="440"> |
+| **Questions.** Answer with one tap. | **Research.** Every step visible, sources included. |
+
+<p align="center">
+  <img src="docs/screenshots/phone-home.png" alt="I.R.I.S. on a phone: home" width="250">
+  &nbsp;
+  <img src="docs/screenshots/phone-chat.png" alt="I.R.I.S. on a phone: a chat" width="250">
+  &nbsp;
+  <img src="docs/screenshots/phone-question.png" alt="I.R.I.S. on a phone: a question card" width="250">
+</p>
+
+## Install (5 minutes)
+
+1. **Download** the installer (`IRIS_<version>_x64-setup.exe`) from [**Releases**](../../releases/latest) and run it.<br>
+   <sub>Windows may warn because the installer isn't signed yet: **More info → Run anyway**.</sub>
+2. **Add a model.** Open **Settings → Providers** and paste an API key, for example from [DeepSeek](https://platform.deepseek.com/) (cheap and capable).
+3. **Say hi to Iris.** Ask her anything, or press **+** and describe the agent you want.
+
+That's it. I.R.I.S. starts with Windows and lives in the tray, so your agents keep working while the window is closed.
+
+## Use it from your phone (optional, ~10 minutes)
+
+At home, on the same Wi-Fi, nothing else is needed. To reach it from anywhere, you deploy your own free relay on Cloudflare once:
+
+1. Install [Node.js](https://nodejs.org/). In this repo's `relay` folder, run `npm install` and then `npx wrangler login` (it opens a browser to sign in to a free Cloudflare account).
+2. Make a server key and save it where I.R.I.S. looks for it (PowerShell):
+   ```powershell
+   New-Item -ItemType Directory -Force "$env:LOCALAPPDATA\dev.iris.desktop\secrets" | Out-Null
+   $b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b)
+   ($b | ForEach-Object { $_.ToString('x2') }) -join '' | Set-Content "$env:LOCALAPPDATA\dev.iris.desktop\secrets\relay.key" -NoNewline
+   Get-Content "$env:LOCALAPPDATA\dev.iris.desktop\secrets\relay.key"
+   ```
+3. Give the relay the same key, and deploy it:
+   ```bash
+   npx wrangler secret put SERVER_KEY      # paste the key from step 2
+   npm run deploy                          # prints https://iris.<your-name>.workers.dev
+   ```
+4. In I.R.I.S., open **Settings → Remote access**, paste that address, and turn it on.
+5. **Pair a device:**
+   - **Android:** install `iris-android.apk` from [Releases](../../releases/latest) and scan the QR code shown in Settings. Allow notifications, and set battery use to *Unrestricted* so they arrive.
+   - **Any browser:** open your relay address and scan the same QR code, or type the pairing code.
+
+## Safe by default
+
+- **Approvals:** commands, installs, restarts, payments and lasting changes ask first. Per agent, you can let some run on their own (*Careful* or *Full* auto).
+- **Encryption:** every message between your devices and your PC is encrypted end to end (ECDH P-256 + AES-256-GCM). The relay only sees sealed data.
+- **Keys and logins:** they stay on your PC and are never shown to agents. Saved logins are encrypted with Windows DPAPI.
+- **Web content:** it's treated as untrusted. Replies are sanitized, remote images never load, and after reading the web, agents need your OK for lasting changes.
+
+Found a security problem? Please report it privately: see [SECURITY.md](SECURITY.md).
+
+## Build it yourself
+
+On Windows with Git, Node.js, Rust and the VS C++ Build Tools (`scripts\server-setup.ps1` installs them):
+
+```powershell
+scripts\build-windows.ps1                       # → target\release\bundle\nsis\IRIS_<version>_x64-setup.exe
+cd android; .\gradlew assembleRelease           # → android\app\build\outputs\apk\release\app-release.apk
+```
+
+How it all works (engine, API, tools, team, relay, Android app): [docs/DEV.md](docs/DEV.md).
+
+## License
+
+[MIT](LICENSE). Early software: it works and is used every day, but expect rough edges.

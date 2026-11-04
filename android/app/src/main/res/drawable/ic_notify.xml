@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The status-bar icon: the I.R.I.S. ring and dot in one color. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M12,3.5a8.5,8.5 0,1 1,0 17a8.5,8.5 0,1 1,0 -17z"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2.2" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,7.8a4.2,4.2 0,1 1,0 8.4a4.2,4.2 0,1 1,0 -8.4z" />
+</vector>

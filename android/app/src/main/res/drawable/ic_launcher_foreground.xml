@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The I.R.I.S. logo (app/public/iris.png) as a vector, sized for the adaptive icon's safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M54,32.5a21.5,21.5 0,1 1,0 43a21.5,21.5 0,1 1,0 -43z"
+        android:strokeWidth="5.4">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:type="linear"
+                android:startX="32"
+                android:startY="34"
+                android:endX="76"
+                android:endY="74">
+                <item android:offset="0" android:color="#FFF0A6DA" />
+                <item android:offset="0.4" android:color="#FFC7C3FF" />
+                <item android:offset="0.7" android:color="#FF93C5FD" />
+                <item android:offset="1" android:color="#FF6EE7C7" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path
+        android:fillColor="#FFA98BFA"
+        android:pathData="M54,43.3a10.7,10.7 0,1 1,0 21.4a10.7,10.7 0,1 1,0 -21.4z" />
+</vector>

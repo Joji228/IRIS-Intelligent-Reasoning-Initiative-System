@@ -1,0 +1,18 @@
+# Build output and IDE files
+.gradle/
+.kotlin/
+build/
+captures/
+.idea/
+*.iml
+
+# Machine-specific paths (the local SDK path)
+local.properties
+
+# Signing secrets: never commit these
+*.keystore
+*.jks
+keystore.properties
+*.apk
+*.aab
+
