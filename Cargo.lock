@@ -2261,7 +2261,9 @@ name = "iris-desktop"
 version = "0.1.0"
 dependencies = [
  "dirs 6.0.0",
+ "hex",
  "serde",
+ "sha2",
  "tauri",
  "tauri-build",
  "tauri-plugin-autostart",

@@ -17,6 +17,7 @@
 // expect. It's as trustworthy as the web app itself, which this relay serves.
 
 import { DurableObject } from 'cloudflare:workers';
+import { securityHeaders } from './headers';
 
 interface Env {
   HUB: DurableObjectNamespace<Hub>;
@@ -49,8 +50,11 @@ export default {
       }
       return env.HUB.get(env.HUB.idFromName('main')).fetch(req);
     }
-    // Everything else: the web app (static files).
-    return env.ASSETS.fetch(req);
+    // Everything else: the web app (static files), with security headers.
+    const res = await env.ASSETS.fetch(req);
+    const headers = new Headers(res.headers);
+    for (const [name, value] of Object.entries(securityHeaders(url.host))) headers.set(name, value);
+    return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
   },
 };
 

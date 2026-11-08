@@ -94,13 +94,32 @@ marked.use({
 
 // The same goes for raw HTML in a reply: no tags that load things by
 // themselves, and no inline styles (`background: url(…)` loads too).
+//
+// `src` is dropped everywhere (an `<input type="image" src=…>` loads its image
+// by itself, and nothing legitimate in a reply needs a `src`: images become
+// links above). Form controls other than the checkboxes of task lists are
+// removed too.
 const PURIFY = {
   USE_PROFILES: { html: true },
-  FORBID_TAGS: ['img', 'picture', 'source', 'video', 'audio', 'track', 'image', 'svg', 'object', 'embed', 'iframe', 'link', 'style'],
-  FORBID_ATTR: ['style', 'srcset', 'background', 'poster'],
+  FORBID_TAGS: [
+    'img', 'picture', 'source', 'video', 'audio', 'track', 'image', 'svg', 'object', 'embed', 'iframe', 'link', 'style',
+    'form', 'textarea', 'select', 'option', 'meta', 'base', 'frame', 'frameset',
+  ],
+  FORBID_ATTR: ['style', 'srcset', 'background', 'poster', 'src', 'formaction', 'ping', 'data', 'xlink:href'],
 };
 
+let hooked = false;
+function installHooks() {
+  if (hooked) return;
+  hooked = true;
+  // Task lists render `<input type="checkbox" disabled>`; every other input goes.
+  DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+    if (node.nodeName === 'INPUT' && (node.getAttribute('type') || '').toLowerCase() !== 'checkbox') node.remove();
+  });
+}
+
 export function renderMarkdown(text: string): string {
+  installHooks();
   const html = marked.parse(text, { async: false }) as string;
   return DOMPurify.sanitize(html, PURIFY) as string;
 }

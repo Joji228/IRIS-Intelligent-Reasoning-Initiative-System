@@ -244,6 +244,11 @@ pub struct Link {
     pairing: Mutex<HashMap<String, i64>>,
     /// Failed logins in a row and when the lockout ends.
     failures: Mutex<(u32, i64)>,
+    /// Woken when the remote-access settings change, so a connection that is
+    /// already open notices (turned off, or pointed at another relay).
+    changed: tokio::sync::Notify,
+    /// Ids of devices that were just removed; live event streams stop for them.
+    revoked: tokio::sync::broadcast::Sender<String>,
 }
 
 impl Link {
@@ -254,7 +259,25 @@ impl Link {
             connected: Default::default(),
             pairing: Mutex::default(),
             failures: Mutex::default(),
+            changed: tokio::sync::Notify::new(),
+            revoked: tokio::sync::broadcast::channel(64).0,
         }
+    }
+
+    /// Saves new remote-access settings and tells the open connection.
+    pub fn set_config(&self, cfg: LinkConfig) {
+        *self.config.lock().unwrap() = cfg;
+        // A permit is kept if nobody is waiting yet, so the change isn't missed.
+        self.changed.notify_one();
+    }
+
+    /// A device was removed: its live streams (direct and through the relay) end.
+    pub fn revoke(&self, device_id: &str) {
+        let _ = self.revoked.send(device_id.to_owned());
+    }
+
+    pub fn watch_revoked(&self) -> tokio::sync::broadcast::Receiver<String> {
+        self.revoked.subscribe()
     }
 
     /// A new one-time pairing code (8 easy-to-read characters).
@@ -330,6 +353,42 @@ fn set_connected(st: &AppState, on: bool) {
     }
 }
 
+/// Whether a connection to `connected_url` should stay open under the current
+/// settings: remote access on, and still the same relay.
+fn should_stay_connected(cfg: &LinkConfig, connected_url: &str) -> bool {
+    let same = |a: &str, b: &str| a.trim().trim_end_matches('/').eq_ignore_ascii_case(b.trim().trim_end_matches('/'));
+    cfg.enabled && !cfg.url.trim().is_empty() && same(&cfg.url, connected_url)
+}
+
+/// Returns once `device_id` has been removed: when its id arrives on
+/// `revoked`, or, as a fallback if messages were missed and every minute,
+/// when `alive()` says the device is gone.
+pub async fn until_revoked(
+    mut revoked: tokio::sync::broadcast::Receiver<String>,
+    device_id: &str,
+    alive: impl Fn() -> bool,
+) {
+    use tokio::sync::broadcast::error::RecvError;
+    let mut recheck = tokio::time::interval(Duration::from_secs(60));
+    recheck.tick().await; // the first tick is immediate
+    loop {
+        tokio::select! {
+            r = revoked.recv() => match r {
+                Ok(id) if id == device_id => return,
+                Ok(_) => {}
+                Err(RecvError::Lagged(_)) => if !alive() { return },
+                Err(RecvError::Closed) => return,
+            },
+            _ = recheck.tick() => if !alive() { return },
+        }
+    }
+}
+
+/// Whether the device owning `token` still exists (a database error counts as yes).
+pub fn device_alive(st: &AppState, token: &str) -> bool {
+    !matches!(st.store.authenticate_device(&crate::auth::hash_token(token)), Ok(None))
+}
+
 /// One session with a phone or browser.
 struct Session {
     seal: Option<Arc<Mutex<Seal>>>,
@@ -376,12 +435,27 @@ async fn connect_once(st: &AppState, url: &str, key: &str) -> anyhow::Result<()>
     let mut sessions: HashMap<String, Session> = HashMap::new();
     // Clients whose time to sign in is up.
     let (deadline_tx, mut deadline_rx) = mpsc::unbounded_channel::<String>();
+    // However the loop ends (closed, error, or switched off), the cleanup
+    // after it runs, so no session task is left behind.
+    let mut result: anyhow::Result<()> = Ok(());
     loop {
         let msg = tokio::select! {
             msg = stream.next() => match msg {
-                Some(msg) => msg?,
+                Some(Ok(msg)) => msg,
+                Some(Err(e)) => {
+                    result = Err(e.into());
+                    break;
+                }
                 None => break,
             },
+            // Remote access was turned off, or pointed at another relay: hang up now.
+            _ = st.link.changed.notified() => {
+                if should_stay_connected(&st.link.config.lock().unwrap(), url) {
+                    continue;
+                }
+                info!("I.R.I.S. Link: remote access changed, disconnecting");
+                break;
+            }
             Some(cid) = deadline_rx.recv() => {
                 if sessions.get(&cid).is_some_and(|s| s.token.is_none()) {
                     if let Some(s) = sessions.remove(&cid) {
@@ -394,6 +468,11 @@ async fn connect_once(st: &AppState, url: &str, key: &str) -> anyhow::Result<()>
                 continue;
             }
         };
+        // Nothing is processed (sign-ins included) once remote access is off.
+        if !st.link.config.lock().unwrap().enabled {
+            info!("I.R.I.S. Link: remote access is off, disconnecting");
+            break;
+        }
         let Ok(text) = msg.to_text() else { continue };
         let Ok(frame) = serde_json::from_str::<Value>(text) else { continue };
         let Some(cid) = frame["c"].as_str().map(str::to_owned) else { continue };
@@ -460,12 +539,12 @@ async fn connect_once(st: &AppState, url: &str, key: &str) -> anyhow::Result<()>
         };
         match msg["t"].as_str().unwrap_or_default() {
             "auth" | "pair" | "login" => match sign_in(st, &msg) {
-                Ok((token, device, fresh)) => {
+                Ok((token, device, fresh, device_id)) => {
                     session.token = Some(token.clone());
                     if let Some(h) = session.events.take() {
                         h.abort();
                     }
-                    session.events = Some(forward_events(st, reply.clone()));
+                    session.events = Some(forward_events(st, reply.clone(), token.clone(), device_id));
                     let mut answer = json!({ "t": "signed_in", "device": device });
                     if fresh {
                         // A new device: this token is how it signs in next time.
@@ -498,19 +577,19 @@ async fn connect_once(st: &AppState, url: &str, key: &str) -> anyhow::Result<()>
         }
     }
     writer.abort();
-    Ok(())
+    result
 }
 
-/// Signs a session in. Returns the device token, the device's name, and
-/// whether the device is new (its token is then sent to it once).
-fn sign_in(st: &AppState, msg: &Value) -> Result<(String, String, bool), String> {
+/// Signs a session in. Returns the device token, the device's name, whether
+/// the device is new (its token is then sent to it once) and its id.
+fn sign_in(st: &AppState, msg: &Value) -> Result<(String, String, bool, String), String> {
     let name = msg["name"].as_str().map(str::trim).filter(|n| !n.is_empty()).unwrap_or("Remote device");
     let name: String = name.chars().take(60).collect();
     match msg["t"].as_str() {
         Some("auth") => {
             let token = msg["token"].as_str().unwrap_or_default();
             match st.store.authenticate_device(&crate::auth::hash_token(token)) {
-                Ok(Some(device)) => Ok((token.to_owned(), device.name, false)),
+                Ok(Some(device)) => Ok((token.to_owned(), device.name, false, device.id)),
                 _ => Err("this device was removed or isn't paired; pair it again".into()),
             }
         }
@@ -528,23 +607,35 @@ fn sign_in(st: &AppState, msg: &Value) -> Result<(String, String, bool), String>
     }
 }
 
-fn new_device(st: &AppState, name: &str) -> Result<(String, String, bool), String> {
+fn new_device(st: &AppState, name: &str) -> Result<(String, String, bool, String), String> {
     let token = crate::auth::new_token();
     let device = st.store.create_device(name, &crate::auth::hash_token(&token)).map_err(|e| e.to_string())?;
     info!("I.R.I.S. Link: new device “{}”", device.name);
     st.emit(crate::events::Event::DeviceAdded { name: device.name.clone() });
-    Ok((token, device.name, true))
+    Ok((token, device.name, true, device.id))
 }
 
-/// Pushes the engine's live events to a signed-in session.
-fn forward_events(st: &AppState, reply: impl Fn(Value) + Send + 'static) -> tokio::task::JoinHandle<()> {
+/// Pushes the engine's live events to a signed-in session, until the session
+/// ends or its device is removed.
+fn forward_events(st: &AppState, reply: impl Fn(Value) + Send + 'static, token: String, device_id: String) -> tokio::task::JoinHandle<()> {
     let mut rx = st.events.subscribe();
+    let revoked = st.link.watch_revoked();
+    let state = st.clone();
     tokio::spawn(async move {
+        let gone = until_revoked(revoked, &device_id, || device_alive(&state, &token));
+        tokio::pin!(gone);
         loop {
-            match rx.recv().await {
-                Ok(event) => reply(json!({ "t": "ev", "e": event })),
-                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
-                Err(_) => break,
+            tokio::select! {
+                _ = &mut gone => {
+                    info!("I.R.I.S. Link: a removed device's live stream was closed");
+                    reply(json!({ "t": "revoked" }));
+                    break;
+                }
+                event = rx.recv() => match event {
+                    Ok(event) => reply(json!({ "t": "ev", "e": event })),
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(_) => break,
+                },
             }
         }
     })
@@ -647,6 +738,47 @@ mod tests {
             reply
         });
         assert!(server2.unwrap().open(&wrong.seal(b"hi")).is_none());
+    }
+
+    #[test]
+    fn switching_off_or_moving_the_relay_drops_the_connection() {
+        let on = LinkConfig { url: "https://relay.example".into(), enabled: true };
+        assert!(should_stay_connected(&on, "https://relay.example"));
+        assert!(should_stay_connected(&on, "https://relay.example/"), "a trailing slash is the same relay");
+        assert!(!should_stay_connected(&LinkConfig { enabled: false, ..on.clone() }, "https://relay.example"), "turned off");
+        assert!(!should_stay_connected(&LinkConfig { url: "https://other.example".into(), ..on.clone() }, "https://relay.example"), "another relay");
+        assert!(!should_stay_connected(&LinkConfig { url: String::new(), ..on.clone() }, "https://relay.example"), "no address");
+    }
+
+    #[tokio::test]
+    async fn a_removed_devices_streams_end() {
+        use tokio::time::timeout;
+        let (tx, _) = tokio::sync::broadcast::channel::<String>(2);
+
+        // Its own id ends the wait, other devices' ids don't.
+        let rx = tx.subscribe();
+        tx.send("someone-else".into()).unwrap();
+        tx.send("mine".into()).unwrap();
+        assert!(timeout(Duration::from_secs(2), until_revoked(rx, "mine", || true)).await.is_ok());
+
+        let rx = tx.subscribe();
+        tx.send("someone-else".into()).unwrap();
+        assert!(
+            timeout(Duration::from_millis(150), until_revoked(rx, "mine", || true)).await.is_err(),
+            "another device's removal leaves this stream alone"
+        );
+
+        // If messages were missed, the device is looked up instead.
+        let rx = tx.subscribe();
+        for i in 0..6 {
+            tx.send(format!("other-{i}")).unwrap();
+        }
+        assert!(timeout(Duration::from_secs(2), until_revoked(rx, "mine", || false)).await.is_ok(), "gone after a lag");
+        let rx = tx.subscribe();
+        for i in 0..6 {
+            tx.send(format!("other-{i}")).unwrap();
+        }
+        assert!(timeout(Duration::from_millis(150), until_revoked(rx, "mine", || true)).await.is_err(), "still there after a lag");
     }
 
     #[test]

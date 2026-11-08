@@ -135,6 +135,14 @@ Be warm, direct and concise. Use Markdown when it helps. If unsure, say so.";
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // `iris-engine --extract-pdf <file>`: the short-lived worker that reads one
+    // PDF, so a file that crashes the parser can't take the engine with it.
+    {
+        let mut args = std::env::args().skip(1);
+        if args.next().as_deref() == Some("--extract-pdf") {
+            std::process::exit(attachments::pdf_worker(&args.next().unwrap_or_default()));
+        }
+    }
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -160,10 +168,12 @@ async fn main() -> Result<()> {
     seed_default_agent(&store, &providers)?;
     ensure_main_agent(&store, &data_dir)?;
     assign_orb_colors(&store)?;
-    // Each agent has one ongoing chat now; older extra threads go.
-    let removed = store.keep_one_thread_per_agent()?;
-    if removed > 0 {
-        info!("removed {removed} extra conversation(s): each agent keeps one chat");
+    // Each agent has one ongoing chat (`chat_thread` picks the latest one). Older
+    // extra conversations from earlier versions are left alone, never deleted.
+    // Files whose chat is gone (deleted before files were cleaned up) are swept.
+    let swept = attachments::sweep_orphans(&data_dir, |id| attachments::valid_id(id) && matches!(store.get_thread(id), Ok(Some(_))));
+    if swept > 0 {
+        info!("deleted the files of {swept} chat(s) that no longer exist");
     }
     memory::sync_souls(&store, &data_dir)?;
     let (local_device_id, created) = auth::ensure_local_token(&store, &data_dir)?;

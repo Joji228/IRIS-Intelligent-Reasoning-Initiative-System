@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ArrowUp, FileText, LoaderCircle, Mic, Plus, Square, Telescope, X } from '@lucide/svelte';
   import { app } from '../app.svelte';
+  import { inWebLink } from '../connection';
   import { tip } from '../tooltip';
   import { voice } from '../voice.svelte';
 
@@ -59,13 +60,16 @@
   // Files waiting to be sent with the next message.
   let files = $state<File[]>([]);
   let picker = $state<HTMLInputElement>();
-  const MAX_FILE = 20 * 1024 * 1024;
+  // Through the relay a file grows to about 1.8x its size and the relay drops
+  // frames over 32 MB, so files that big would vanish without a word: say so up front.
+  const MAX_MB = inWebLink ? 16 : 20;
+  const MAX_FILE = MAX_MB * 1024 * 1024;
   const ACCEPT =
     'image/png,image/jpeg,image/gif,image/webp,.txt,.md,.csv,.tsv,.json,.xml,.yaml,.yml,.toml,.ini,.log,.html,.htm,.css,.js,.ts,.py,.rs,.ps1,.sh,.bat,.sql,.pdf';
 
   function addFiles(list: FileList | File[] | null) {
     for (const f of Array.from(list ?? [])) {
-      if (f.size > MAX_FILE) app.toast(`${f.name} is larger than 20 MB`, 'error');
+      if (f.size > MAX_FILE) app.toast(`${f.name} is larger than ${MAX_MB} MB`, 'error');
       else if (files.length < 10) files.push(f);
     }
     input?.focus();

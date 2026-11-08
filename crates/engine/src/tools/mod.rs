@@ -211,9 +211,11 @@ pub const WEB_CONTENT_FUNCTIONS: &[&str] = &[
     "web_search", "web_fetch", "browser_open", "browser_read", "browser_click", "browser_type", "browser_scroll", "browser_back",
 ];
 /// Functions whose effects outlast the reply (settings, schedules, tools,
-/// skills, connections): after web content was read, they ask the user.
+/// skills, connections, memory): after web content was read, they ask the user.
+/// Memory counts: what an agent saves is put back into its instructions in
+/// every later reply, so text from a web page must not get in unnoticed.
 pub const LASTING_FUNCTIONS: &[&str] =
-    &["change_setting", "switch_model", "create_routine", "delete_routine", "request_tools", "save_skill"];
+    &["change_setting", "switch_model", "create_routine", "delete_routine", "request_tools", "save_skill", "memory"];
 
 /// Which toolset a callable function belongs to.
 pub fn toolset_of(function: &str) -> Option<&'static str> {
@@ -808,6 +810,12 @@ mod tests {
         assert_eq!(names(&["shell", "get_time"]), vec!["get_time", "run_command"]);
         assert!(names(&[]).is_empty());
         assert_eq!(specs_for(&[])[0].name, "memory");
+    }
+
+    #[test]
+    fn saving_to_memory_asks_after_reading_the_web() {
+        assert!(LASTING_FUNCTIONS.contains(&"memory"), "memory is put into later prompts, so injected text must not slip in");
+        assert!(LASTING_FUNCTIONS.contains(&"save_skill") && LASTING_FUNCTIONS.contains(&"change_setting"));
     }
 
     #[test]

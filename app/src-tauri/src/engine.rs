@@ -135,3 +135,56 @@ fn spawn_engine() -> std::io::Result<Child> {
     }
     cmd.spawn()
 }
+
+/// Whether what answers on the engine's port is the real engine: it must be
+/// able to prove it knows `token` (the engine reads it from the same file).
+/// Something else that grabbed the port first can't, so it never gets the token.
+pub fn engine_knows_token(token: &str) -> bool {
+    use std::io::{Read, Write};
+    use sha2::{Digest, Sha256};
+
+    // A nonce that is new every time (it only has to be unique, not secret).
+    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or_default();
+    let nonce = hex::encode(&Sha256::digest(format!("{nanos}:{}", std::process::id()).as_bytes())[..12]);
+    let addr = SocketAddr::from(([127, 0, 0, 1], ENGINE_PORT));
+    let Ok(mut conn) = TcpStream::connect_timeout(&addr, Duration::from_millis(800)) else { return false };
+    let _ = conn.set_read_timeout(Some(Duration::from_secs(2)));
+    let _ = conn.set_write_timeout(Some(Duration::from_secs(2)));
+    let request = format!("GET /health?nonce={nonce} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n");
+    if conn.write_all(request.as_bytes()).is_err() {
+        return false;
+    }
+    let mut reply = Vec::new();
+    let _ = conn.take(64 * 1024).read_to_end(&mut reply);
+    let reply = String::from_utf8_lossy(&reply);
+    let expected = hex::encode(Sha256::digest(format!("iris-proof:{nonce}:{token}").as_bytes()));
+    reply.split("\"proof\":\"").nth(1).and_then(|rest| rest.get(..64)).is_some_and(|got| got == expected)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{io::{Read, Write}, net::TcpListener};
+
+    /// A stand-in engine on a spare port can't be tested (the port is fixed),
+    /// but the check must refuse something that answers without a proof.
+    #[test]
+    fn a_listener_that_cannot_prove_itself_is_refused() {
+        // Nothing (or an impostor) on the engine's port: no proof, no token.
+        if TcpListener::bind(("127.0.0.1", ENGINE_PORT)).is_ok() {
+            // Port free right now: bind it ourselves as the impostor.
+            let listener = TcpListener::bind(("127.0.0.1", ENGINE_PORT)).unwrap();
+            let t = std::thread::spawn(move || {
+                if let Ok((mut c, _)) = listener.accept() {
+                    let mut buf = [0u8; 512];
+                    let _ = c.read(&mut buf);
+                    let _ = c.write_all(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{\"status\":\"ok\",\"name\":\"I.R.I.S. engine\"}");
+                }
+            });
+            assert!(!engine_knows_token("iris_real_token"));
+            let _ = t.join();
+        } else {
+            assert!(!engine_knows_token("iris_definitely_not_the_token"));
+        }
+    }
+}

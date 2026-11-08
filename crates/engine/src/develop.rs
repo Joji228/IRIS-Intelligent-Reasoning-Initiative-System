@@ -173,13 +173,27 @@ async fn current_branch() -> Result<String, String> {
     Ok(git(&["rev-parse", "--abbrev-ref", "HEAD"]).await?.trim().to_owned())
 }
 
+/// Work branches are named `iris/<time>`.
+const BRANCH_PREFIX: &str = "iris/";
+
+fn is_agent_branch(branch: &str) -> bool {
+    branch.len() > BRANCH_PREFIX.len() && branch.starts_with(BRANCH_PREFIX)
+}
+
 /// The agent's work branch, created from `main` on first use.
 async fn work_branch() -> Result<String, String> {
     let branch = current_branch().await?;
     if branch != MAIN_BRANCH {
+        // Only a branch this agent made counts as its own work; anything else
+        // is somebody's checkout, and edits or a discard there could hurt.
+        if !is_agent_branch(&branch) {
+            return Err(format!(
+                "the repository is on the branch {branch}, which isn't one I created; ask the user to switch it back to {MAIN_BRANCH}"
+            ));
+        }
         return Ok(branch);
     }
-    let name = format!("iris/{}", chrono::Local::now().format("%Y%m%d-%H%M%S"));
+    let name = format!("{BRANCH_PREFIX}{}", chrono::Local::now().format("%Y%m%d-%H%M%S"));
     git(&["switch", "-c", &name]).await?;
     Ok(name)
 }
@@ -442,18 +456,37 @@ async fn discard() -> ToolOutcome {
         Ok(b) => b,
         Err(e) => return ToolOutcome::err("Couldn't discard", e),
     };
-    if branch == MAIN_BRANCH {
-        let _ = git(&["checkout", "--", "."]).await;
-        let _ = git(&["clean", "-fd"]).await;
-        return ToolOutcome::ok("Nothing to discard", "You were on main; any stray edits were reverted.");
+    // Only the agent's own `iris/…` branch is ever thrown away. On main (or any
+    // other branch) the checkout may hold the user's own unfinished work, which
+    // is none of this tool's business: nothing is reset or cleaned there.
+    if !is_agent_branch(&branch) {
+        return ToolOutcome::ok(
+            "Nothing to discard",
+            format!("The repository is on {branch}, not one of my work branches, so there is nothing of mine to discard. Nothing was changed."),
+        );
     }
+    // Edits that were never committed are kept in a stash instead of being
+    // deleted for good, so a discard can always be taken back by hand.
+    let stash_name = format!("iris-discard-{}", branch.replace('/', "-"));
+    // (`diff` marks new files "intent to add"; undo that first, which only
+    // touches the index, so the stash can take them.)
+    let _ = git(&["reset", "-q"]).await;
+    let stashed = match git(&["-c", "user.name=I.R.I.S. Developer", "-c", "user.email=developer@iris.local", "stash", "push", "--include-untracked", "-m", &stash_name]).await {
+        Ok(out) => !out.contains("No local changes"),
+        Err(e) => return ToolOutcome::err("Couldn't discard", format!("couldn't set the uncommitted edits aside: {e}")),
+    };
     let steps = async {
-        git(&["switch", "-f", MAIN_BRANCH]).await?;
-        git(&["clean", "-fd"]).await?;
+        git(&["switch", MAIN_BRANCH]).await?;
         git(&["branch", "-D", &branch]).await
     };
     match steps.await {
-        Ok(_) => ToolOutcome::ok(format!("Discarded {branch}"), format!("Deleted {branch}; back on main.")),
+        Ok(_) => ToolOutcome::ok(
+            format!("Discarded {branch}"),
+            format!(
+                "Deleted {branch}; back on main.{}",
+                if stashed { format!(" Its uncommitted edits were kept in the git stash “{stash_name}” in case they are needed.") } else { String::new() }
+            ),
+        ),
         Err(e) => ToolOutcome::err("Couldn't discard", e),
     }
 }
@@ -816,10 +849,29 @@ async fn start_checker(st: &AppState, developer: &Agent, pending: &PendingUpdate
 }
 
 /// Tests on the repo's current commit, plus the live engine's main endpoints.
+/// `git status --porcelain` output with nothing changed or untracked.
+fn tree_is_clean(porcelain: &str) -> bool {
+    porcelain.trim().is_empty()
+}
+
 async fn verify(st: &AppState) -> ToolOutcome {
     let Ok(_busy) = BUSY.try_lock() else {
         return ToolOutcome::err("Busy", "another check or build is running; try again when it's done");
     };
+    // The checks build and run the code in the repo (build scripts, tests and
+    // config files all execute), so they only ever run on committed code: the
+    // user has seen and approved that diff (`code_apply`). Edits still waiting
+    // for approval are never run.
+    match git(&["status", "--porcelain"]).await {
+        Ok(status) if tree_is_clean(&status) => {}
+        Ok(_) => {
+            return ToolOutcome::err(
+                "Not verified",
+                "there are changes that haven't been approved yet. Checks only run on committed code, because building and testing runs the code itself: ask the user to approve with code_apply first.",
+            );
+        }
+        Err(e) => return ToolOutcome::err("Not verified", format!("couldn't look at the repo's state: {e}")),
+    }
     let head = git(&["log", "--oneline", "-1"]).await.unwrap_or_default();
     let (checks_ok, checks) = run_checks().await;
     let mut live = Vec::new();
@@ -916,6 +968,24 @@ mod tests {
     }
 
     #[test]
+    fn only_my_own_branches_are_mine() {
+        assert!(is_agent_branch("iris/20261104-101500"));
+        assert!(!is_agent_branch("main"));
+        assert!(!is_agent_branch("iris/"), "a bare prefix isn't a branch");
+        assert!(!is_agent_branch("feature/iris/x"));
+        assert!(!is_agent_branch("my-work"));
+        assert!(!is_agent_branch(""));
+    }
+
+    #[test]
+    fn verify_only_runs_committed_code() {
+        assert!(tree_is_clean(""));
+        assert!(tree_is_clean("  \n"));
+        assert!(!tree_is_clean(" M crates/engine/build.rs\n"));
+        assert!(!tree_is_clean("?? crates/engine/tests/new.rs\n"), "untracked files count too");
+    }
+
+    #[test]
     fn essentials_keep_failures() {
         let out = "   Compiling x\nrunning 3 tests\ntest a ... ok\n---- tools::tests::x stdout ----\npanicked at foo.rs:3\nleft: 1\n\ntest result: FAILED. 2 passed; 1 failed\n";
         let e = essentials(out);
@@ -963,6 +1033,19 @@ mod tests {
         // (git may check the file out with CRLF on Windows)
         assert_eq!(std::fs::read_to_string(dir.join("app/page.txt")).unwrap().replace("\r\n", "\n"), "Credit: top right\n");
         assert!(!dir.join("app/new.txt").exists());
+
+        // The user's own unfinished work on main is none of discard's business,
+        // and neither is a branch the agent didn't make.
+        std::fs::write(dir.join("mine.txt"), "my notes").unwrap();
+        std::fs::write(dir.join("app/page.txt"), "my edit\n").unwrap();
+        assert!(discard().await.output.contains("Nothing was changed"));
+        assert_eq!(std::fs::read_to_string(dir.join("mine.txt")).unwrap(), "my notes");
+        assert_eq!(std::fs::read_to_string(dir.join("app/page.txt")).unwrap(), "my edit\n");
+        git(&["switch", "-q", "-c", "feature/mine"]).await.unwrap();
+        assert!(discard().await.output.contains("Nothing was changed"));
+        assert_eq!(current_branch().await.unwrap(), "feature/mine");
+        assert!(!write("app/x.txt", "x").await.ok, "no edits on someone else's branch");
+        assert!(dir.join("mine.txt").exists());
         unsafe { std::env::remove_var("IRIS_REPO") };
         let _ = std::fs::remove_dir_all(&dir);
     }

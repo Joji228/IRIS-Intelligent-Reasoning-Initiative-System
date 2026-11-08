@@ -66,6 +66,14 @@ pub fn host_matches(host: &str, site: &str) -> bool {
     !site.is_empty() && (host == site || host.ends_with(&format!(".{site}")))
 }
 
+/// Whether a saved login for `site` may be filled into the page now open at
+/// `protocol` (`location.protocol`, e.g. "https:") on `host`: only on the
+/// account's own site, and only over HTTPS, so a page that was served in plain
+/// text (and could have been changed on the way) never receives a password.
+pub fn login_allowed(protocol: &str, host: &str, site: &str) -> bool {
+    protocol.eq_ignore_ascii_case("https:") && host_matches(host, site)
+}
+
 pub fn load(data_dir: &Path) -> Vec<Account> {
     let Ok(bytes) = std::fs::read(path(data_dir)) else { return Vec::new() };
     let Some(plain) = dpapi::unprotect(&bytes) else {
@@ -149,6 +157,13 @@ mod tests {
         assert!(host_matches("shop.example", "https://shop.example"));
         assert!(!host_matches("shop.example.evil.com", "shop.example"), "look-alike hosts don't match");
         assert!(!host_matches("notshop.example", "shop.example"));
+
+        // Logins are only filled over HTTPS, on the account's own site.
+        assert!(login_allowed("https:", "www.shop.example", "shop.example"));
+        assert!(!login_allowed("http:", "shop.example", "shop.example"), "plain HTTP never gets a password");
+        assert!(!login_allowed("file:", "shop.example", "shop.example"));
+        assert!(!login_allowed("https:", "shop.example.evil.com", "shop.example"));
+        assert!(!login_allowed("", "shop.example", "shop.example"));
 
         let dir = std::env::temp_dir().join(format!("iris-vault-{}", uuid::Uuid::new_v4().simple()));
         let a = Account {

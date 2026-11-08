@@ -54,6 +54,27 @@ const OLD_TOOL_OUTPUT_CHARS: usize = 1_500;
 /// What a tool result may add to the context at most.
 const MAX_TOOL_OUTPUT_CHARS: usize = 16_000;
 
+/// Whether the reply just before `current` read outside content (web pages,
+/// connected services). Its text is still in the conversation and may have
+/// steered this reply too, so the "ask before lasting changes" rule carries
+/// over to it instead of starting fresh.
+fn previous_reply_read_outside_content(state: &AppState, thread_id: &str, current: &str) -> bool {
+    state.store.list_messages(thread_id).is_ok_and(|messages| read_outside_content_before(&messages, current))
+}
+
+fn read_outside_content_before(messages: &[Message], current: &str) -> bool {
+    messages
+        .iter()
+        .rev()
+        .find(|m| m.role == MessageRole::Assistant && m.id != current)
+        .is_some_and(|m| {
+            m.rounds.iter().flat_map(|r| &r.tools).any(|t| {
+                t.status == ToolStatus::Done
+                    && (tools::WEB_CONTENT_FUNCTIONS.contains(&t.name.as_str()) || t.name.starts_with(tools::MCP_PREFIX))
+            })
+        })
+}
+
 pub async fn run(
     state: AppState,
     agent: Agent,
@@ -70,7 +91,7 @@ pub async fn run(
         pending_images: Vec::new(),
         handed_off: Vec::new(),
         granted: Vec::new(),
-        read_web: false,
+        read_web: previous_reply_read_outside_content(&state, &thread_id, &reply_id),
         research: false,
     };
     let result = reply.generate(&cancel).await;
@@ -1065,4 +1086,46 @@ fn system_prompt(state: &AppState, agent: &Agent, thread_id: &str, conn: &Conn, 
     }
     prompt.push_str(&format!("\n\nNow: {}.", tools::now_line()));
     prompt
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn reply(id: &str, role: &str, tools: &[(&str, &str)]) -> Message {
+        let steps: Vec<_> = tools
+            .iter()
+            .enumerate()
+            .map(|(i, (name, status))| {
+                serde_json::json!({ "id": format!("c{i}"), "name": name, "arguments": "{}", "status": status })
+            })
+            .collect();
+        serde_json::from_value(serde_json::json!({
+            "id": id, "thread_id": "t", "role": role, "content": "", "reasoning": "",
+            "rounds": [{ "tools": steps }], "status": "complete", "error": null, "model": null,
+            "prompt_tokens": null, "completion_tokens": null, "context_tokens": null, "created_at": 0
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn reading_the_web_carries_over_to_the_next_reply() {
+        let web = reply("a1", "assistant", &[("web_fetch", "done")]);
+        let user = reply("u2", "user", &[]);
+        let current = reply("a2", "assistant", &[]);
+        // The reply before this one read a page: this one starts out cautious.
+        assert!(read_outside_content_before(&[web.clone(), user.clone(), current.clone()], "a2"));
+        // Connected services count too.
+        let mcp = reply("a1", "assistant", &[("mcp__mail__list", "done")]);
+        assert!(read_outside_content_before(&[mcp, user.clone(), current.clone()], "a2"));
+        // A failed read brought nothing in; ordinary tools aren't outside content.
+        let failed = reply("a1", "assistant", &[("web_fetch", "error")]);
+        assert!(!read_outside_content_before(&[failed, user.clone(), current.clone()], "a2"));
+        let plain = reply("a1", "assistant", &[("read_file", "done")]);
+        assert!(!read_outside_content_before(&[plain, user.clone(), current.clone()], "a2"));
+        // Only the reply right before counts, so it fades after one clean reply.
+        let clean = reply("a1b", "assistant", &[("get_time", "done")]);
+        assert!(!read_outside_content_before(&[web, user.clone(), clean, user, current], "a2"));
+        assert!(!read_outside_content_before(&[], "a2"));
+    }
 }

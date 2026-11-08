@@ -22,7 +22,7 @@ Chat with them from your desktop, any browser, or your Android phone.
 - **A team, not one bot.** **Iris**, your Chief of Staff, answers simple things herself and hands bigger jobs to specialists. Make your own with one sentence ("an agent that checks my websites every morning").
 - **Agents that actually do things.** They search and read the web, drive a real browser, work with files, run commands, keep your PC updated, and follow schedules: up to 10 agents, each with its own memory.
 - **You stay in charge.** Risky steps wait for your OK. Agents ask you questions as clickable cards. Anything that failed lands in one inbox with a Retry button.
-- **Private by design.** Everything runs and stays on your machine. Remote access is end-to-end encrypted through a relay you own.
+- **Private by design.** Everything runs and stays on your machine. Remote access through the relay (a small service you deploy yourself) is end-to-end encrypted.
 - **Any model.** DeepSeek by default, or any OpenAI-compatible provider (OpenAI, Groq, OpenRouter, a local server…).
 
 ## See it
@@ -76,7 +76,7 @@ At home, on the same Wi-Fi, nothing else is needed. To reach it from anywhere, y
 ## Safe by default
 
 - **Approvals:** commands, installs, restarts, payments and lasting changes ask first. Per agent, you can let some run on their own (*Careful* or *Full* auto).
-- **Encryption:** every message between your devices and your PC is encrypted end to end (ECDH P-256 + AES-256-GCM). The relay only sees sealed data.
+- **Encryption:** every message sent through the relay (I.R.I.S. Link) is encrypted end to end (ECDH P-256 + AES-256-GCM), and the relay only sees sealed data. Connecting directly over your home network (`http://<your PC>:7700`) is **not** encrypted: use it only on a network you trust, and use the relay for anything else.
 - **Keys and logins:** they stay on your PC and are never shown to agents. Saved logins are encrypted with Windows DPAPI.
 - **Web content:** it's treated as untrusted. Replies are sanitized, remote images never load, and after reading the web, agents need your OK for lasting changes.
 

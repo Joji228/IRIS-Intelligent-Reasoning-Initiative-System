@@ -365,26 +365,66 @@ impl OpenAiCompatible {
     ) -> Result<Completion, ProviderError> {
         let body = self.chat_body(model, messages, opts);
         let resp = self.request(reqwest::Method::POST, "chat/completions").json(&body).send().await?;
-        let mut stream = check_status(resp).await?.bytes_stream();
+        let stream = check_status(resp).await?.bytes_stream();
+        read_events(Box::pin(stream), STREAM_IDLE_TIMEOUT, &mut on_delta).await
+    }
+}
 
-        let mut out = Completion::default();
-        let mut buf: Vec<u8> = Vec::new();
-        'read: while let Some(chunk) = stream.next().await {
-            buf.extend_from_slice(&chunk?);
-            // Lines are complete once we see '\n', so decoding them as UTF-8
-            // never splits a multi-byte character.
-            while let Some(pos) = buf.iter().position(|&b| b == b'\n') {
-                let line: Vec<u8> = buf.drain(..=pos).collect();
-                let line = String::from_utf8_lossy(&line);
-                match parse_sse_line(&line) {
-                    SseLine::Data(data) => apply_chunk(&data, &mut out, &mut on_delta)?,
-                    SseLine::Done => break 'read,
-                    SseLine::Ignore => {}
+/// How long a reply may go without a single byte (keep-alive comments count)
+/// before it is given up on.
+const STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(120);
+/// The longest line accepted from a provider; a stream without line breaks
+/// would otherwise grow the buffer without end.
+const MAX_STREAM_LINE: usize = 4 * 1024 * 1024;
+
+/// Reads a chat-completion event stream into a [`Completion`].
+///
+/// The reply only counts as complete if the provider said so (`[DONE]` or a
+/// `finish_reason`): a connection that simply closes mid-answer is an error,
+/// and so is one that goes quiet for longer than `idle`. Whatever text arrived
+/// before the failure has already gone through `on_delta`.
+async fn read_events<S, B, E>(
+    mut stream: S,
+    idle: Duration,
+    on_delta: &mut impl FnMut(Delta),
+) -> Result<Completion, ProviderError>
+where
+    S: futures_util::Stream<Item = Result<B, E>> + Unpin,
+    B: AsRef<[u8]>,
+    E: Into<ProviderError>,
+{
+    let mut out = Completion::default();
+    let mut buf: Vec<u8> = Vec::new();
+    let mut done = false;
+    'read: loop {
+        let next = tokio::time::timeout(idle, stream.next())
+            .await
+            .map_err(|_| ProviderError::Stream(format!("the model stopped sending data for {} seconds", idle.as_secs())))?;
+        let Some(chunk) = next else { break };
+        let bytes = chunk.map_err(|e| -> ProviderError { e.into() })?;
+        buf.extend_from_slice(bytes.as_ref());
+        // Lines are complete once we see '\n', so decoding them as UTF-8
+        // never splits a multi-byte character.
+        while let Some(pos) = buf.iter().position(|&b| b == b'\n') {
+            let line: Vec<u8> = buf.drain(..=pos).collect();
+            let line = String::from_utf8_lossy(&line);
+            match parse_sse_line(&line) {
+                SseLine::Data(data) => apply_chunk(&data, &mut out, &mut *on_delta)?,
+                SseLine::Done => {
+                    done = true;
+                    break 'read;
                 }
+                SseLine::Ignore => {}
             }
         }
-        Ok(out)
+        if buf.len() > MAX_STREAM_LINE {
+            return Err(ProviderError::Stream("the model sent a line that is far too long".into()));
+        }
     }
+    if !done && out.finish_reason.is_none() {
+        return Err(ProviderError::Stream("the connection closed before the answer was complete".into()));
+    }
+    Ok(out)
 }
 
 /// A multipart boundary unlikely to appear in the audio (clock-based; it only
@@ -554,6 +594,63 @@ mod tests {
                 Delta::Content("lo".into())
             ]
         );
+    }
+
+    fn sse(lines: &[&str]) -> Vec<Result<Vec<u8>, ProviderError>> {
+        lines.iter().map(|l| Ok(format!("data: {l}\n\n").into_bytes())).collect()
+    }
+
+    #[tokio::test]
+    async fn a_complete_stream_is_accepted() {
+        let mut got = String::new();
+        let chunks = sse(&[
+            r#"{"choices":[{"delta":{"content":"Hi"}}]}"#,
+            r#"{"choices":[{"delta":{"content":"!"},"finish_reason":"stop"}]}"#,
+            "[DONE]",
+        ]);
+        let out = read_events(futures_util::stream::iter(chunks), Duration::from_secs(5), &mut |d| {
+            if let Delta::Content(s) = d {
+                got.push_str(&s)
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!((out.content.as_str(), got.as_str()), ("Hi!", "Hi!"));
+        // A provider that sends a finish_reason but no [DONE] is complete too.
+        let chunks = sse(&[r#"{"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}"#]);
+        assert!(read_events(futures_util::stream::iter(chunks), Duration::from_secs(5), &mut |_| {}).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn a_stream_cut_short_is_an_error_not_a_reply() {
+        let mut got = String::new();
+        let chunks = sse(&[r#"{"choices":[{"delta":{"content":"Half an ans"}}]}"#]);
+        let err = read_events(futures_util::stream::iter(chunks), Duration::from_secs(5), &mut |d| {
+            if let Delta::Content(s) = d {
+                got.push_str(&s)
+            }
+        })
+        .await
+        .unwrap_err();
+        assert!(err.to_string().contains("closed before the answer was complete"), "{err}");
+        assert_eq!(got, "Half an ans", "what arrived was still passed on");
+        // An empty stream is no answer either.
+        assert!(read_events(futures_util::stream::iter(Vec::<Result<Vec<u8>, ProviderError>>::new()), Duration::from_secs(5), &mut |_| {}).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn a_silent_stream_times_out() {
+        let first = futures_util::stream::iter(sse(&[r#"{"choices":[{"delta":{"content":"Hi"}}]}"#]));
+        let stream = first.chain(futures_util::stream::pending());
+        let err = read_events(Box::pin(stream), Duration::from_millis(100), &mut |_| {}).await.unwrap_err();
+        assert!(err.to_string().contains("stopped sending data"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn a_stream_without_line_breaks_is_cut_off() {
+        let big = vec![Ok::<_, ProviderError>(vec![b'x'; 5 * 1024 * 1024])];
+        let err = read_events(futures_util::stream::iter(big), Duration::from_secs(5), &mut |_| {}).await.unwrap_err();
+        assert!(err.to_string().contains("too long"), "{err}");
     }
 
     #[test]

@@ -32,18 +32,28 @@ struct Connection {
 #[tauri::command]
 async fn connection() -> Result<Connection, String> {
     let token_file = engine::data_dir().join("local-token.txt");
+    let mut impostor = false;
     for _ in 0..40 {
         if engine::engine_reachable() {
             if let Ok(token) = std::fs::read_to_string(&token_file) {
-                return Ok(Connection {
-                    url: format!("http://127.0.0.1:{ENGINE_PORT}"),
-                    token: token.trim().to_owned(),
-                });
+                let token = token.trim().to_owned();
+                // Only the real engine can prove it knows the token; anything
+                // else on the port (another program, another account) gets nothing.
+                if engine::engine_knows_token(&token) {
+                    return Ok(Connection { url: format!("http://127.0.0.1:{ENGINE_PORT}"), token });
+                }
+                impostor = true;
             }
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
-    Err("the I.R.I.S. engine did not start".into())
+    Err(if impostor {
+        format!(
+            "something other than the I.R.I.S. engine is answering on port {ENGINE_PORT}, so the app did not connect (it would have had to hand it your access token). Close the program using that port, or restart your computer."
+        )
+    } else {
+        "the I.R.I.S. engine did not start".into()
+    })
 }
 
 fn show_main(app: &AppHandle) {

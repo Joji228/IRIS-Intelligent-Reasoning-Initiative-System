@@ -484,13 +484,23 @@ impl<E: Into<anyhow::Error>> From<E> for ApiError {
 
 // ---- health & status ------------------------------------------------------
 
-async fn health(State(st): State<AppState>) -> Json<serde_json::Value> {
-    Json(json!({
+async fn health(
+    State(st): State<AppState>,
+    Query(q): Query<std::collections::HashMap<String, String>>,
+) -> Json<serde_json::Value> {
+    let mut out = json!({
         "status": "ok",
         "name": "I.R.I.S. engine",
         "version": env!("CARGO_PKG_VERSION"),
         "uptime_secs": st.started.elapsed().as_secs(),
-    }))
+    });
+    // The desktop app asks the engine to prove it is the real one (see `auth::proof`).
+    if let Some(nonce) = q.get("nonce").filter(|n| !n.is_empty() && n.len() <= 64) {
+        if let Ok(token) = std::fs::read_to_string(st.data_dir.join(auth::LOCAL_TOKEN_FILE)) {
+            out["proof"] = json!(auth::proof(token.trim(), nonce));
+        }
+    }
+    Json(out)
 }
 
 #[derive(Serialize)]
@@ -898,13 +908,16 @@ async fn delete_agent(State(st): State<AppState>, Path(id): Path<String>) -> Api
     if st.store.get_agent(&id)?.is_some_and(|a| a.role == "main") {
         return Err(ApiError::conflict("the main agent can't be deleted"));
     }
+    let mut thread_ids = Vec::new();
     for thread in st.store.list_threads(&id)? {
         st.cancel_run(&thread.id);
+        thread_ids.push(thread.id);
     }
     if !st.store.delete_agent(&id)? {
         return Err(ApiError::not_found("agent"));
     }
     crate::memory::remove_agent_files(&st.data_dir, &id);
+    crate::attachments::remove_threads(&st.data_dir, &thread_ids);
     st.emit(Event::AgentDeleted { agent_id: id });
     Ok(StatusCode::NO_CONTENT)
 }
@@ -1024,6 +1037,8 @@ async fn clear_chat(State(st): State<AppState>, Path(agent_id): Path<String>) ->
         return Err(ApiError::conflict(format!("{} is working; stop it first", agent.name)));
     }
     let thread = st.store.clear_thread(&thread.id)?.ok_or_else(|| ApiError::not_found("chat"))?;
+    // The files people attached go with the messages.
+    crate::attachments::remove_threads(&st.data_dir, std::slice::from_ref(&thread.id));
     st.emit(Event::ThreadUpdated { thread: thread.clone() });
     Ok(Json(ThreadDetail { thread, messages: Vec::new(), running: false }))
 }
@@ -1315,6 +1330,7 @@ async fn delete_thread(State(st): State<AppState>, Path(id): Path<String>) -> Ap
     let thread = st.store.get_thread(&id)?.ok_or_else(|| ApiError::not_found("thread"))?;
     st.cancel_run(&id);
     st.store.delete_thread(&id)?;
+    crate::attachments::remove_threads(&st.data_dir, std::slice::from_ref(&id));
     st.emit(Event::ThreadDeleted { thread_id: id, agent_id: thread.agent_id });
     Ok(StatusCode::NO_CONTENT)
 }
@@ -1394,7 +1410,14 @@ async fn get_attachment(
     State(st): State<AppState>,
     Path((thread_id, id)): Path<(String, String)>,
 ) -> ApiResult<Response> {
-    let dir = st.data_dir.join("attachments").join(&thread_id);
+    // Both ids come from the URL: only real ones (never `..` or a path), and
+    // only for a chat that still exists, so deleted chats' files can't be fetched.
+    let Some(dir) = crate::attachments::thread_dir(&st.data_dir, &thread_id) else {
+        return Err(ApiError::not_found("attachment"));
+    };
+    if !crate::attachments::valid_id(&id) || st.store.get_thread(&thread_id)?.is_none() {
+        return Err(ApiError::not_found("attachment"));
+    }
     let prefix = format!("{id}-");
     let file = std::fs::read_dir(&dir)
         .ok()
@@ -1402,7 +1425,28 @@ async fn get_attachment(
         .ok_or_else(|| ApiError::not_found("attachment"))?;
     let name = file.file_name().to_string_lossy().into_owned();
     let bytes = std::fs::read(file.path())?;
-    Ok(([(axum::http::header::CONTENT_TYPE, crate::attachments::mime_of(&name))], bytes).into_response())
+    let mime = crate::attachments::mime_of(&name);
+    // Whatever was uploaded is served from the engine's own address, so a page
+    // (an uploaded .html, say) must never run there: no sniffing, no scripts,
+    // and anything that isn't an image or a PDF downloads instead of opening.
+    let is_pdf = mime == "application/pdf";
+    let inline = is_pdf || mime.starts_with("image/");
+    let mut response = bytes.into_response();
+    let headers = response.headers_mut();
+    headers.insert(axum::http::header::CONTENT_TYPE, axum::http::HeaderValue::from_static(mime));
+    headers.insert(axum::http::header::X_CONTENT_TYPE_OPTIONS, axum::http::HeaderValue::from_static("nosniff"));
+    headers.insert(
+        axum::http::header::CONTENT_DISPOSITION,
+        axum::http::HeaderValue::from_static(if inline { "inline" } else { "attachment" }),
+    );
+    // (A sandbox would stop the browser's PDF viewer, so PDFs go without it.)
+    if !is_pdf {
+        headers.insert(
+            axum::http::header::CONTENT_SECURITY_POLICY,
+            axum::http::HeaderValue::from_static("sandbox; default-src 'none'; img-src 'self' data:"),
+        );
+    }
+    Ok(response)
 }
 
 #[derive(Serialize)]
@@ -1847,6 +1891,8 @@ async fn delete_device(State(st): State<AppState>, Path(id): Path<String>) -> Ap
         ));
     }
     if st.store.delete_device(&id)? {
+        // Its live event streams (direct and through the relay) end now.
+        st.link.revoke(&id);
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(ApiError::not_found("device"))
@@ -1892,7 +1938,8 @@ async fn put_link(State(st): State<AppState>, Json(body): Json<crate::link::Link
     }
     let cfg = crate::link::LinkConfig { url, enabled: body.enabled };
     config::set_link(&st.data_dir, &cfg)?;
-    *st.link.config.lock().unwrap() = cfg;
+    // Also hangs up a relay connection that is already open (off, or a new address).
+    st.link.set_config(cfg);
     Ok(Json(link_status(&st)))
 }
 
@@ -1940,18 +1987,27 @@ async fn delete_link_login(State(st): State<AppState>) -> Json<LinkStatus> {
 
 // ---- live events ----------------------------------------------------------------
 
-async fn events(State(st): State<AppState>, ws: WebSocketUpgrade) -> Response {
+async fn events(State(st): State<AppState>, axum::Extension(who): axum::Extension<auth::Authed>, ws: WebSocketUpgrade) -> Response {
     let rx = st.events.subscribe();
-    ws.on_upgrade(move |socket| stream_events(socket, rx))
+    ws.on_upgrade(move |socket| stream_events(st, who, socket, rx))
 }
 
-async fn stream_events(mut socket: WebSocket, mut rx: broadcast::Receiver<Event>) {
+async fn stream_events(st: AppState, who: auth::Authed, mut socket: WebSocket, mut rx: broadcast::Receiver<Event>) {
     let hello = json!({ "type": "hello", "version": env!("CARGO_PKG_VERSION") }).to_string();
     if socket.send(WsMessage::Text(hello.into())).await.is_err() {
         return;
     }
+    // The stream ends when this device is removed (it was only checked at sign-in before).
+    let gone = crate::link::until_revoked(st.link.watch_revoked(), &who.device_id, || {
+        !matches!(st.store.authenticate_device(&who.token_hash), Ok(None))
+    });
+    tokio::pin!(gone);
     loop {
         tokio::select! {
+            _ = &mut gone => {
+                let _ = socket.send(WsMessage::Close(None)).await;
+                break;
+            }
             event = rx.recv() => {
                 let text = match event {
                     Ok(event) => serde_json::to_string(&event).expect("events serialize"),

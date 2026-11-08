@@ -80,6 +80,9 @@ struct Cdp {
     tx: Mutex<futures_util::stream::SplitSink<tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>, WsMessage>>,
     pending: Arc<std::sync::Mutex<HashMap<u64, oneshot::Sender<Value>>>>,
     next: AtomicU64,
+    /// Recent answers to "does this host point at this computer or the LAN?",
+    /// so a page with fifty images from one host costs one lookup.
+    hosts: std::sync::Mutex<HashMap<String, (bool, Instant)>>,
 }
 
 impl Cdp {
@@ -88,6 +91,8 @@ impl Cdp {
         let (tx, mut rx) = ws.split();
         let pending: Arc<std::sync::Mutex<HashMap<u64, oneshot::Sender<Value>>>> = Arc::default();
         let waiting = pending.clone();
+        // Requests the browser has paused, waiting for our verdict.
+        let (paused_tx, mut paused_rx) = tokio::sync::mpsc::unbounded_channel::<Value>();
         tokio::spawn(async move {
             while let Some(Ok(msg)) = rx.next().await {
                 let Ok(text) = msg.to_text() else { continue };
@@ -96,10 +101,58 @@ impl Cdp {
                     if let Some(tx) = waiting.lock().unwrap().remove(&id) {
                         let _ = tx.send(v);
                     }
+                } else if v["method"] == "Fetch.requestPaused" {
+                    let _ = paused_tx.send(v);
                 }
             }
         });
-        Ok(Arc::new(Self { tx: Mutex::new(tx), pending, next: AtomicU64::new(1) }))
+        let cdp = Arc::new(Self { tx: Mutex::new(tx), pending, next: AtomicU64::new(1), hosts: Default::default() });
+        // Every request a page makes (the page itself, redirects, frames,
+        // images, scripts, fetches) waits here until it has been judged.
+        let judge = cdp.clone();
+        tokio::spawn(async move {
+            while let Some(event) = paused_rx.recv().await {
+                let judge = judge.clone();
+                tokio::spawn(async move { judge.judge(event).await });
+            }
+        });
+        Ok(cdp)
+    }
+
+    /// Lets a paused request go on, or fails it if it would reach this
+    /// computer or the local network.
+    async fn judge(&self, event: Value) {
+        let session = event["sessionId"].as_str();
+        let (Some(request), Some(url)) = (event["params"]["requestId"].as_str(), event["params"]["request"]["url"].as_str()) else {
+            return;
+        };
+        let allowed = match quick_verdict(url) {
+            Some(verdict) => verdict,
+            None => !self.points_local(url).await,
+        };
+        let _ = if allowed {
+            self.call(session, "Fetch.continueRequest", json!({ "requestId": request })).await
+        } else {
+            warn!("the browser was stopped from requesting a local address: {}", trim(url, 80));
+            self.call(session, "Fetch.failRequest", json!({ "requestId": request, "errorReason": "AccessDenied" })).await
+        };
+    }
+
+    /// Whether the URL's host resolves to this computer or the LAN (cached for a minute).
+    async fn points_local(&self, url: &str) -> bool {
+        let Some(host) = url::Url::parse(url).ok().and_then(|u| u.host_str().map(str::to_ascii_lowercase)) else { return true };
+        if let Some((local, at)) = self.hosts.lock().unwrap().get(&host) {
+            if at.elapsed() < Duration::from_secs(60) {
+                return *local;
+            }
+        }
+        let local = blocked_after_dns(url).await;
+        let mut hosts = self.hosts.lock().unwrap();
+        if hosts.len() > 500 {
+            hosts.clear();
+        }
+        hosts.insert(host, (local, Instant::now()));
+        local
     }
 
     async fn call(&self, session: Option<&str>, method: &str, params: Value) -> anyhow::Result<Value> {
@@ -150,6 +203,8 @@ impl Browser {
         let attached = s.cdp.call(None, "Target.attachToTarget", json!({ "targetId": target, "flatten": true })).await?;
         let session = attached["sessionId"].as_str().unwrap_or_default().to_owned();
         s.cdp.call(Some(&session), "Page.enable", json!({})).await?;
+        // Pause every request of this tab until `Cdp::judge` has looked at it.
+        s.cdp.call(Some(&session), "Fetch.enable", json!({ "patterns": [{ "urlPattern": "*" }] })).await?;
         s.tabs.insert(agent_id.to_owned(), Tab { target, session: session.clone(), labels: HashMap::new(), submits: HashMap::new() });
         Ok((s.cdp.clone(), session))
     }
@@ -273,6 +328,19 @@ fn local_ip(ip: std::net::IpAddr) -> bool {
             // Loopback, unspecified, unique local (fc00::/7), link-local (fe80::/10).
             None => v6.is_loopback() || v6.is_unspecified() || (v6.segments()[0] & 0xfe00) == 0xfc00 || (v6.segments()[0] & 0xffc0) == 0xfe80,
         },
+    }
+}
+
+/// The quick part of judging a browser request: `Some(allowed)` when the URL
+/// alone settles it, `None` when the host name still has to be looked up.
+fn quick_verdict(url: &str) -> Option<bool> {
+    let scheme = url.split(':').next().unwrap_or_default().to_ascii_lowercase();
+    match scheme.as_str() {
+        // Content that is part of the page itself.
+        "data" | "blob" | "about" => Some(true),
+        "http" | "https" => blocked(url).then_some(false),
+        // file:, ftp:, chrome:, extensions…: never.
+        _ => Some(false),
     }
 }
 
@@ -404,10 +472,15 @@ async fn act(st: &AppState, agent: &str, name: &str, args: &Value) -> anyhow::Re
                 .into_iter()
                 .find(|a| a.name.eq_ignore_ascii_case(&wanted) || a.id == wanted)
                 .ok_or_else(|| anyhow::anyhow!("there's no saved account called {wanted}; see list_accounts"))?;
-            let host = eval(&cdp, s, "location.hostname").await?.as_str().unwrap_or_default().to_owned();
-            // Only ever on the account's own site, so a look-alike page can't collect it.
-            if !crate::vault::host_matches(&host, &account.site) {
+            let place = eval(&cdp, s, "[location.protocol, location.hostname].join('|')").await?.as_str().unwrap_or_default().to_owned();
+            let (protocol, host) = place.split_once('|').unwrap_or_default();
+            // Only ever on the account's own site, so a look-alike page can't collect it...
+            if !crate::vault::host_matches(host, &account.site) {
                 anyhow::bail!("this page is on {host}, but {} is saved for {}; open {} first", account.name, account.site, account.site);
+            }
+            // ...and only over HTTPS, so a page that was sent in plain text can't read it.
+            if !crate::vault::login_allowed(protocol, host, &account.site) {
+                anyhow::bail!("this page isn't secure (it doesn't use https), so the saved login for {} isn't filled in", account.name);
             }
             let js = LOGIN_JS
                 .replace("__IRIS_USER__", &serde_json::to_string(&account.username)?)
@@ -496,7 +569,12 @@ fn snapshot_js() -> String {
   document.querySelectorAll('[data-iris-n]').forEach(e => e.removeAttribute('data-iris-n'));
   const sel = 'a[href], button, input:not([type=hidden]), select, textarea, [role=button], [role=link], [role=checkbox], [role=tab], [role=menuitem], [contenteditable=true], summary';
   const items = [], labels = {{}}, submits = {{}};
-  const textOf = el => (el.innerText || el.value || el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.title || el.name || '').trim().replace(/\s+/g, ' ').slice(0, 80);
+  // What a field holds is never part of its label, and nothing secret is ever
+  // shown: passwords, anything the vault filled, anything that looks like one.
+  // Only buttons use their value (`<input type=submit value="Sign in">`).
+  const secret = el => el.type === 'password' || !!el.dataset.irisFilled || /pass(word|wd|code|phrase)|\bpass\b|pwd|\botp\b|secret|cvv|cc-number/i.test([el.autocomplete, el.name, el.id].join(' '));
+  const valueLabel = el => ['submit', 'button', 'reset'].includes(el.type) ? el.value : '';
+  const textOf = el => (el.innerText || valueLabel(el) || el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.title || el.name || '').trim().replace(/\s+/g, ' ').slice(0, 80);
   const isSubmit = el => (el.tagName === 'BUTTON' && (el.type || 'submit') === 'submit' && el.form) || (el.tagName === 'INPUT' && ['submit', 'image'].includes(el.type));
   // What Enter in a field submits: search boxes are harmless; otherwise the
   // form's submit button (or "submit form" / "send message" when unlabeled).
@@ -520,7 +598,7 @@ fn snapshot_js() -> String {
     labels[n] = label || (isSubmit(el) ? 'submit form' : '');
     if (tag === 'textarea' || el.isContentEditable || (tag === 'input' && ['text', 'search', 'email', 'url', 'tel', 'number', ''].includes(el.type))) submits[n] = enterTarget(el);
     let extra = '';
-    if (tag === 'input' || tag === 'textarea') extra = el.dataset.irisFilled ? ' (filled from the vault)' : el.type === 'password' ? ' (password)' : (el.value ? ` = "${{el.value.slice(0, 40)}}"` : (el.placeholder ? ` (${{el.placeholder.slice(0, 40)}})` : ''));
+    if (tag === 'input' || tag === 'textarea') extra = el.dataset.irisFilled ? ' (filled from the vault)' : el.type === 'password' ? ' (password)' : secret(el) ? ' (hidden)' : (el.value && !['submit', 'button', 'reset'].includes(el.type) ? ` = "${{el.value.slice(0, 40)}}"` : (el.placeholder ? ` (${{el.placeholder.slice(0, 40)}})` : ''));
     if (tag === 'a') {{ try {{ extra = ' → ' + new URL(el.href).pathname.slice(0, 60); }} catch (e) {{}} }}
     items.push(`[${{n}}] ${{kind}} "${{label}}"${{extra}}`);
   }}
@@ -547,11 +625,30 @@ mod tests {
         assert!(blocked("http://router.local/"));
         assert!(!blocked("https://www.shop.example/"));
         assert!(!blocked("http://172.32.0.1/"));
+        assert!(blocked("http://169.254.169.254/latest/meta-data/"), "cloud metadata address");
         assert!(COMMIT_WORDS.is_match("Place order"));
         assert!(COMMIT_WORDS.is_match("Ολοκλήρωση παραγγελίας"));
         assert!(COMMIT_WORDS.is_match("Pay €12.50"));
         assert!(!COMMIT_WORDS.is_match("Sign in"));
         assert!(!COMMIT_WORDS.is_match("Menu"));
+    }
+
+    #[test]
+    fn every_browser_request_is_judged_before_it_goes_out() {
+        // Redirects, frames and subresources all arrive here as plain URLs.
+        assert_eq!(quick_verdict("http://127.0.0.1:7700/v1/agents"), Some(false));
+        assert_eq!(quick_verdict("http://192.168.1.1/admin"), Some(false));
+        assert_eq!(quick_verdict("http://localhost:9333/json/list"), Some(false));
+        assert_eq!(quick_verdict("https://[::1]/"), Some(false));
+        assert_eq!(quick_verdict("file:///C:/Windows/win.ini"), Some(false));
+        assert_eq!(quick_verdict("ftp://example.com/x"), Some(false));
+        assert_eq!(quick_verdict("chrome://settings"), Some(false));
+        assert_eq!(quick_verdict("data:text/html,<p>hi</p>"), Some(true));
+        assert_eq!(quick_verdict("blob:https://example.com/1234"), Some(true));
+        assert_eq!(quick_verdict("about:blank"), Some(true));
+        // A public-looking name still needs its address checked.
+        assert_eq!(quick_verdict("https://www.example.com/a.png"), None);
+        assert_eq!(quick_verdict("HTTP://Example.com/"), None);
     }
 
     #[test]

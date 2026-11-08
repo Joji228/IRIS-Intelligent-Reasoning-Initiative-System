@@ -340,12 +340,15 @@ fn dismiss(st: &AppState, me: &Agent, name: &str) -> ToolOutcome {
             format!("you can only dismiss agents you created; {} was created by someone else", target.name),
         );
     }
+    let mut thread_ids = Vec::new();
     for thread in st.store.list_threads(&target.id).unwrap_or_default() {
         st.cancel_thread(&thread.id);
+        thread_ids.push(thread.id);
     }
     match st.store.delete_agent(&target.id) {
         Ok(_) => {
             crate::memory::remove_agent_files(&st.data_dir, &target.id);
+            crate::attachments::remove_threads(&st.data_dir, &thread_ids);
             st.emit(Event::AgentDeleted { agent_id: target.id.clone() });
             ok(format!("Dismissed {}", target.name), format!("{} was removed from the team.", target.name))
         }
@@ -370,8 +373,10 @@ fn remove_after_reply(st: AppState, agent_id: String, coordinator_thread: String
             Ok(Some(a)) if a.role == TEMP_ROLE => {}
             _ => return,
         }
+        let thread_ids: Vec<String> = st.store.list_threads(&agent_id).unwrap_or_default().into_iter().map(|t| t.id).collect();
         if st.store.delete_agent(&agent_id).is_ok() {
             crate::memory::remove_agent_files(&st.data_dir, &agent_id);
+            crate::attachments::remove_threads(&st.data_dir, &thread_ids);
             st.emit(Event::AgentDeleted { agent_id });
         }
     });

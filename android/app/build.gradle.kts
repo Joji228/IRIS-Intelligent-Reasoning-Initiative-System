@@ -26,7 +26,9 @@ android {
     //   storePassword=...
     //   keyAlias=...
     //   keyPassword=...
-    // Without it, release builds are signed with the local debug key.
+    // Without it, a release build on your own machine is signed with the local debug key (fine
+    // for trying it out; the phone won't update it from a differently signed APK). Builds that
+    // are published (the release workflow sets IRIS_REQUIRE_RELEASE_KEY=true) refuse to do that.
     val keystoreProps = rootProject.file("keystore.properties").takeIf { it.exists() }?.let { file ->
         Properties().apply { file.inputStream().use { load(it) } }
     }
@@ -46,7 +48,16 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+            val releaseKey = signingConfigs.findByName("release")
+            if (releaseKey == null && System.getenv("IRIS_REQUIRE_RELEASE_KEY") == "true") {
+                throw GradleException(
+                    "No release signing key (keystore.properties is missing). Published APKs must be signed " +
+                        "with the same key every time, or phones can't update them. " +
+                        "Set the ANDROID_KEYSTORE_BASE64, ANDROID_STORE_PASSWORD, ANDROID_KEY_ALIAS and " +
+                        "ANDROID_KEY_PASSWORD secrets.",
+                )
+            }
+            signingConfig = releaseKey ?: signingConfigs.getByName("debug")
         }
     }
 

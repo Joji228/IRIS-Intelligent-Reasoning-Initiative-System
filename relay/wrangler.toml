@@ -11,6 +11,10 @@ workers_dev = true
 directory = "./public"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
+# Without this, Cloudflare answers asset requests itself and the Worker never
+# sees them, so its security headers (src/headers.ts) would not be sent. The
+# hashed files under /assets are left out: they are static and cost no Worker run.
+run_worker_first = ["/*", "!/assets/*"]
 
 [[durable_objects.bindings]]
 name = "HUB"

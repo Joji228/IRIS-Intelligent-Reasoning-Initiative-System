@@ -7,6 +7,10 @@
   let token = $state('');
   let busy = $state(false);
   let failed = $state(false);
+  // A direct address on the network is plain HTTP: the token isn't encrypted on its way.
+  const unencrypted = $derived(
+    /^http:\/\//i.test(url.trim()) && !/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])([:/]|$)/i.test(url.trim()),
+  );
 
   async function connect() {
     busy = true;
@@ -60,6 +64,9 @@
         <div>
           <label class="label" for="c-url">Engine address</label>
           <input id="c-url" class="input font-mono text-[13px]" bind:value={url} placeholder="http://192.168.x.x:7700" />
+          {#if unencrypted}
+            <p class="mt-1.5 text-[12px] text-faint">This connection isn't encrypted. Use it only on a network you trust.</p>
+          {/if}
         </div>
         <div>
           <label class="label" for="c-token">Access token</label>

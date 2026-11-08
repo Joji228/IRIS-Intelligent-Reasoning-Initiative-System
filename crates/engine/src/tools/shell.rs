@@ -34,15 +34,25 @@ pub async fn run(workspace: &Path, command: &str, timeout: Duration) -> ToolOutc
         .stderr(Stdio::piped())
         .kill_on_drop(true);
 
-    let child = match cmd.spawn() {
+    let mut child = match cmd.spawn() {
         Ok(c) => c,
         Err(e) => return ToolOutcome::err(summary, format!("could not start the shell: {e}")),
     };
-    match tokio::time::timeout(timeout, child.wait_with_output()).await {
-        Ok(Ok(out)) => {
-            let code = out.status.code().unwrap_or(-1);
-            let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
-            let stderr = String::from_utf8_lossy(&out.stderr);
+    let (Some(stdout), Some(stderr)) = (child.stdout.take(), child.stderr.take()) else {
+        return ToolOutcome::err(summary, "could not read the command's output");
+    };
+    // Both pipes are drained as they fill, keeping only the first part: a
+    // command that prints without end can't use up the server's memory.
+    let work = async {
+        let ((out, out_cut), (err, err_cut), status) = tokio::join!(read_capped(stdout), read_capped(stderr), child.wait());
+        (out, out_cut, err, err_cut, status)
+    };
+    let finished = tokio::time::timeout(timeout, work).await;
+    match finished {
+        Ok((out, out_cut, err, err_cut, Ok(status))) => {
+            let code = status.code().unwrap_or(-1);
+            let mut text = String::from_utf8_lossy(&out).into_owned();
+            let stderr = String::from_utf8_lossy(&err);
             if !stderr.trim().is_empty() {
                 text.push_str("\n[stderr]\n");
                 text.push_str(&stderr);
@@ -50,13 +60,44 @@ pub async fn run(workspace: &Path, command: &str, timeout: Duration) -> ToolOutc
             if text.trim().is_empty() {
                 text = "(no output)".into();
             }
-            let output = format!("Exit code: {code}\n\n{}", truncate(text.trim(), MAX_OUTPUT_CHARS));
-            ToolOutcome { ok: out.status.success(), output, summary: format!("{summary} · exit {code}") }
+            let mut shown = truncate(text.trim(), MAX_OUTPUT_CHARS);
+            if out_cut || err_cut {
+                shown.push_str("\n[the command printed more than the limit; the rest was dropped]");
+            }
+            let output = format!("Exit code: {code}\n\n{shown}");
+            ToolOutcome { ok: status.success(), output, summary: format!("{summary} · exit {code}") }
         }
-        Ok(Err(e)) => ToolOutcome::err(summary, format!("the command failed to run: {e}")),
-        // Dropping the future kills the process (kill_on_drop).
-        Err(_) => ToolOutcome::err(summary, format!("timed out after {} seconds and was stopped", timeout.as_secs())),
+        Ok((.., Err(e))) => ToolOutcome::err(summary, format!("the command failed to run: {e}")),
+        Err(_) => {
+            let _ = child.start_kill();
+            ToolOutcome::err(summary, format!("timed out after {} seconds and was stopped", timeout.as_secs()))
+        }
     }
+}
+
+/// The most output kept per stream (bytes); the rest is read and thrown away.
+const MAX_CAPTURE: usize = 1024 * 1024;
+
+/// Reads a pipe to its end, keeping at most [`MAX_CAPTURE`] bytes. The flag
+/// says whether anything was dropped.
+async fn read_capped(mut pipe: impl tokio::io::AsyncRead + Unpin) -> (Vec<u8>, bool) {
+    use tokio::io::AsyncReadExt;
+    let mut kept = Vec::new();
+    let mut cut = false;
+    let mut chunk = [0u8; 16 * 1024];
+    loop {
+        match pipe.read(&mut chunk).await {
+            Ok(0) | Err(_) => break,
+            Ok(n) => {
+                let room = MAX_CAPTURE - kept.len();
+                if n > room {
+                    cut = true;
+                }
+                kept.extend_from_slice(&chunk[..n.min(room)]);
+            }
+        }
+    }
+    (kept, cut)
 }
 
 #[cfg(test)]
@@ -82,6 +123,14 @@ mod tests {
         let t = run(&ws, slow, Duration::from_secs(2)).await;
         assert!(!t.ok);
         assert!(t.output.contains("timed out"));
+
+        // A flood of output is read in bounded memory and cut, not buffered whole.
+        // (3 MB in a few thousand big lines: quick even on a slow computer.)
+        let flood = if cfg!(windows) { "1..3000 | ForEach-Object { 'x' * 1000 }" } else { "head -c 3000000 /dev/zero | tr '\\0' 'x'" };
+        let big = run(&ws, flood, Duration::from_secs(120)).await;
+        assert!(big.ok, "{}", big.output);
+        assert!(big.output.contains("more than the limit"), "{}", &big.output[big.output.len().saturating_sub(300)..]);
+        assert!(big.output.len() < 20_000, "the result stays small");
         let _ = std::fs::remove_dir_all(&ws);
     }
 }

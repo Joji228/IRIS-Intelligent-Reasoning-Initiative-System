@@ -29,6 +29,14 @@ pub fn hash_token(token: &str) -> String {
     hex::encode(Sha256::digest(token.as_bytes()))
 }
 
+/// What the real engine answers to `GET /health?nonce=…`: a hash that can only
+/// be made by something that knows the local token. The desktop app checks it
+/// before it hands that token to whatever is listening on the engine's port,
+/// so another program that grabbed the port first never receives it.
+pub fn proof(token: &str, nonce: &str) -> String {
+    hex::encode(Sha256::digest(format!("iris-proof:{nonce}:{token}").as_bytes()))
+}
+
 pub const LOCAL_TOKEN_FILE: &str = "local-token.txt";
 
 /// Makes sure `local-token.txt` in the data dir holds a valid token for the
@@ -48,12 +56,24 @@ pub fn ensure_local_token(store: &Store, data_dir: &Path) -> Result<(String, Opt
     Ok((device.id, Some(path)))
 }
 
-pub async fn require_auth(State(state): State<AppState>, req: Request, next: Next) -> Response {
+/// Who made a request that passed [`require_auth`] (handlers that keep a
+/// connection open use it to notice when the device is removed).
+#[derive(Clone)]
+pub struct Authed {
+    pub device_id: String,
+    pub token_hash: String,
+}
+
+pub async fn require_auth(State(state): State<AppState>, mut req: Request, next: Next) -> Response {
     let Some(token) = bearer(req.headers()).or_else(|| query_token(req.uri())) else {
         return (StatusCode::UNAUTHORIZED, "missing token").into_response();
     };
-    match state.store.authenticate_device(&hash_token(&token)) {
-        Ok(Some(_)) => next.run(req).await,
+    let token_hash = hash_token(&token);
+    match state.store.authenticate_device(&token_hash) {
+        Ok(Some(device)) => {
+            req.extensions_mut().insert(Authed { device_id: device.id, token_hash });
+            next.run(req).await
+        }
         Ok(None) => (StatusCode::UNAUTHORIZED, "invalid token").into_response(),
         Err(e) => {
             error!("auth lookup failed: {e}");
@@ -86,6 +106,16 @@ mod tests {
         assert!(a.starts_with("iris_") && a.len() == 5 + 64);
         assert_eq!(hash_token(&a), hash_token(&a));
         assert_ne!(hash_token(&a), hash_token(&b));
+    }
+
+    #[test]
+    fn proof_needs_the_token_and_the_nonce() {
+        let p = proof("iris_secret", "abc123");
+        assert_eq!(p.len(), 64);
+        assert_eq!(p, proof("iris_secret", "abc123"));
+        assert_ne!(p, proof("iris_other", "abc123"), "another token gives another proof");
+        assert_ne!(p, proof("iris_secret", "abc124"), "a replayed proof fails for a new nonce");
+        assert!(!p.contains("secret"));
     }
 
     #[test]
