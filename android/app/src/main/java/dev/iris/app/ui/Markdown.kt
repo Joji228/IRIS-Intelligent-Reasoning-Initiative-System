@@ -33,6 +33,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.coerceIn
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -318,14 +321,27 @@ fun Markdown(text: String, modifier: Modifier = Modifier, color: Color = C.text,
                         Modifier.width(IntrinsicSize.Max).clip(RoundedCornerShape(10.dp)).border(1.dp, C.lineStrong, RoundedCornerShape(10.dp)),
                     ) {
                         val cols = b.rows.maxOf { it.size }
+                        val cellStyle = { r: Int -> style(13.5.sp, C.text, if (r == 0) FontWeight.SemiBold else FontWeight.Normal, 20.sp) }
+                        // One width per column, from its widest cell (each row used to size its own
+                        // cells, so the columns didn't line up from one row to the next).
+                        val measurer = rememberTextMeasurer()
+                        val density = LocalDensity.current
+                        val widths = remember(b.rows, density) {
+                            (0 until cols).map { c ->
+                                val widest = b.rows.indices.maxOf { r ->
+                                    measurer.measure(inline(b.rows[r].getOrElse(c) { "" }), cellStyle(r), softWrap = false).size.width
+                                }
+                                with(density) { (widest.toDp() + 22.dp).coerceIn(72.dp, 240.dp) }
+                            }
+                        }
                         b.rows.forEachIndexed { r, row ->
                             Row(Modifier.height(IntrinsicSize.Min).background(if (r == 0) C.elevated else Color.Transparent)) {
                                 for (c in 0 until cols) {
                                     if (c > 0) Box(Modifier.width(1.dp).fillMaxHeight().background(C.line))
                                     RichText(
                                         inline(row.getOrElse(c) { "" }),
-                                        style(13.5.sp, C.text, if (r == 0) FontWeight.SemiBold else FontWeight.Normal, 20.sp),
-                                        Modifier.widthIn(min = 72.dp, max = 240.dp).padding(horizontal = 11.dp, vertical = 7.dp),
+                                        cellStyle(r),
+                                        Modifier.width(widths[c]).padding(horizontal = 11.dp, vertical = 7.dp),
                                     )
                                 }
                             }

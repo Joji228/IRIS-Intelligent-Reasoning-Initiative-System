@@ -226,8 +226,16 @@ fun SignInScreen(vm: IrisViewModel) {
 
 private val PaddingValues14 = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 13.dp)
 
-/** The relay is always reached over https, even when the address is typed with http://. */
+/**
+ * The relay is always reached over https, even when the address is typed with http://.
+ * The one exception is for development: a debug build may use a relay running on the same
+ * computer (`wrangler dev`, reached through `adb reverse`), which only speaks plain http.
+ */
 private fun normalizeRelay(s: String): String {
-    val t = s.trim().trimEnd('/').removePrefix("https://").removePrefix("http://")
+    val raw = s.trim().trimEnd('/')
+    if (dev.iris.app.BuildConfig.DEBUG && LOCAL_RELAY.matches(raw)) return raw
+    val t = raw.removePrefix("https://").removePrefix("http://")
     return "https://$t"
 }
+
+private val LOCAL_RELAY = Regex("""^http://(localhost|127\.0\.0\.1|10\.0\.2\.2)(:\d{1,5})?$""")

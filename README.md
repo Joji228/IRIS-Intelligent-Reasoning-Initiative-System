@@ -24,6 +24,7 @@ Chat with them from your desktop, any browser, or your Android phone.
 - **You stay in charge.** Risky steps wait for your OK. Agents ask you questions as clickable cards. Anything that failed lands in one inbox with a Retry button.
 - **Private by design.** Everything runs and stays on your machine. Remote access through the relay (a small service you deploy yourself) is end-to-end encrypted.
 - **Any model.** DeepSeek by default, or any OpenAI-compatible provider (OpenAI, Groq, OpenRouter, a local server…).
+- **Keeps itself up to date.** One button installs a new version on the PC, and the phone app updates the same way.
 
 ## See it
 
@@ -34,13 +35,16 @@ Chat with them from your desktop, any browser, or your Android phone.
 | <img src="docs/screenshots/desktop-question.png" alt="An agent asking a question with clickable answers" width="440"> | <img src="docs/screenshots/desktop-chat.png" alt="A chat with web research and a comparison table" width="440"> |
 | **Questions.** Answer with one tap. | **Research.** Every step visible, sources included. |
 
+**On your phone.** The Android app: every chat with its agent's live orb, full replies (tables included), and questions you answer with one tap. Send photos and files, approve steps, and get notified when an agent needs you.
+
 <p align="center">
-  <img src="docs/screenshots/phone-home.png" alt="I.R.I.S. on a phone: home" width="250">
+  <img src="docs/screenshots/phone-home.png" alt="The I.R.I.S. Android app: chats with each agent's orb" width="250">
   &nbsp;
-  <img src="docs/screenshots/phone-chat.png" alt="I.R.I.S. on a phone: a chat" width="250">
+  <img src="docs/screenshots/phone-chat.png" alt="The I.R.I.S. Android app: a reply with a table" width="250">
   &nbsp;
-  <img src="docs/screenshots/phone-question.png" alt="I.R.I.S. on a phone: a question card" width="250">
+  <img src="docs/screenshots/phone-question.png" alt="The I.R.I.S. Android app: a question with clickable answers" width="250">
 </p>
+<p align="center"><sub>Screenshots of the real apps with made-up agents and chats.</sub></p>
 
 ## Install (5 minutes)
 
@@ -53,7 +57,7 @@ That's it. I.R.I.S. starts with Windows and lives in the tray, so your agents ke
 
 ## Use it from your phone (optional, ~10 minutes)
 
-At home, on the same Wi-Fi, nothing else is needed. To reach it from anywhere, you deploy your own free relay on Cloudflare once:
+The phone app always connects through a relay, which keeps everything end-to-end encrypted, at home and away. You deploy your own free relay on Cloudflare once (a browser at home can also open `http://<your PC>:7700` directly, unencrypted):
 
 1. Install [Node.js](https://nodejs.org/). In this repo's `relay` folder, run `npm install` and then `npx wrangler login` (it opens a browser to sign in to a free Cloudflare account).
 2. Make a server key and save it where I.R.I.S. looks for it (PowerShell):
