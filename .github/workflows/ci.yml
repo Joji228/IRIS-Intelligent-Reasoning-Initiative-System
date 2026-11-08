@@ -78,5 +78,6 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - run: chmod +x gradlew && ./gradlew assembleDebug
+      # (The release build too: its code shrinker once broke the QR scanner, and only that build shows it.)
+      - run: chmod +x gradlew && ./gradlew assembleDebug assembleRelease
         working-directory: android
