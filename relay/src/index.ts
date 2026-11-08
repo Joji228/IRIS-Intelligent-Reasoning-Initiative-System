@@ -53,7 +53,7 @@ export default {
     // Everything else: the web app (static files), with security headers.
     const res = await env.ASSETS.fetch(req);
     const headers = new Headers(res.headers);
-    for (const [name, value] of Object.entries(securityHeaders(url.host))) headers.set(name, value);
+    for (const [name, value] of Object.entries(securityHeaders(url.host, url.protocol === 'https:'))) headers.set(name, value);
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
   },
 };

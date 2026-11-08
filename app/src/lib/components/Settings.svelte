@@ -1812,7 +1812,7 @@
         </div>
         <dl class="mt-6 grid max-w-md grid-cols-[140px_1fr] gap-y-2 text-[13px]">
           <dt class="text-faint">Engine version</dt>
-          <dd>{app.engineVersion || '—'}</dd>
+          <dd>{app.engineVersion || app.update?.current || '—'}</dd>
           <dt class="text-faint">Engine address</dt>
           <dd class="font-mono text-[12px]">{app.api?.base}</dd>
           <dt class="text-faint">Status</dt>

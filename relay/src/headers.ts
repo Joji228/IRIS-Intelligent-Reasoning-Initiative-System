@@ -5,7 +5,7 @@
 // no other origins, no framing (an approval button must not be clickable
 // through someone else's page), and connections only to this relay.
 
-export function securityHeaders(host: string): Record<string, string> {
+export function securityHeaders(host: string, secure = true): Record<string, string> {
   const csp = [
     "default-src 'self'",
     "script-src 'self'",
@@ -13,7 +13,7 @@ export function securityHeaders(host: string): Record<string, string> {
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
     "media-src 'self' blob: data:",
-    `connect-src 'self' wss://${host}`,
+    `connect-src 'self' ${secure ? 'wss' : 'ws'}://${host}`,
     "manifest-src 'self'",
     "object-src 'none'",
     "base-uri 'none'",
