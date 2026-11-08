@@ -82,6 +82,26 @@ fun HomeScreen(vm: IrisViewModel) {
             }
         }
 
+        vm.phoneUpdate?.let { (release, _) ->
+            item("update") {
+                Row(
+                    Modifier.animateItem().padding(start = 16.dp, end = 16.dp, top = 14.dp).fillMaxWidth()
+                        .background(C.accentSoft, RoundedCornerShape(20.dp))
+                        .border(1.dp, C.accent.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
+                        .press { vm.open(Screen.Settings("about")) }.padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Icon(Lucide.Download, C.accentHi, 18.dp)
+                    Column(Modifier.weight(1f)) {
+                        Txt("Version ${release.version} is out", 14.sp, C.text, FontWeight.SemiBold)
+                        Txt("Tap to update this app", 12.5.sp, C.faint, maxLines = 1)
+                    }
+                    Icon(Lucide.ChevronRight, C.faint, 16.dp)
+                }
+            }
+        }
+
         if (vm.problems.isNotEmpty()) {
             item("problems") {
                 val n = vm.problems.size

@@ -25,6 +25,7 @@ mod skills;
 mod system;
 mod team;
 mod tools;
+mod update;
 mod voice;
 mod vault;
 
@@ -239,6 +240,7 @@ async fn main() -> Result<()> {
     tokio::spawn(routines::run_forever(state.clone()));
     tokio::spawn(link::run_forever(state.clone()));
     tokio::spawn(problems::run_forever(state.clone()));
+    tokio::spawn(update::run_forever(state.clone()));
 
     let listener = tokio::net::TcpListener::bind(addr)
         .await

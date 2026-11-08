@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Where the camera saves a photo for the message box (cleared with the app's cache). -->
+<!-- Where the camera saves a photo for the message box, and where an update is kept until Android installs it (both cleared with the app's cache). -->
 <paths>
     <cache-path name="camera" path="camera/" />
+    <cache-path name="updates" path="updates/" />
 </paths>

@@ -16,8 +16,8 @@ android {
         targetSdk = 36
         // versionCode only ever goes up (Android refuses to install a lower one over the
         // app already on the phone); versionName is what the user sees.
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.2.1"
     }
 
     // Release signing comes from keystore.properties next to this folder's settings file,

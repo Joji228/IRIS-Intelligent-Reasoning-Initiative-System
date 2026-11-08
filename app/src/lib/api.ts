@@ -12,6 +12,7 @@ import type {
   ResponseStyle,
   Device,
   Limits,
+  UpdateStatus,
   IrisEvent,
   Message,
   NewAgent,
@@ -132,6 +133,9 @@ export class IrisApi {
   models = (id: string) => this.req<string[]>('GET', `/v1/providers/${id}/models`);
   balance = (id: string) => this.req<Balance>('GET', `/v1/providers/${id}/balance`);
   limits = () => this.req<Limits>('GET', '/v1/settings/limits');
+  update = (refresh = false) => this.req<UpdateStatus>('GET', `/v1/update${refresh ? '?refresh=true' : ''}`);
+  installUpdate = (force = false) => this.req<null>('POST', '/v1/update/install', { force });
+  setUpdateAutoCheck = (autoCheck: boolean) => this.req<UpdateStatus>('PUT', '/v1/update/settings', { auto_check: autoCheck });
   putLimits = (daily_tokens: number, weekly_tokens: number) =>
     this.req<Limits>('PUT', '/v1/settings/limits', { daily_tokens, weekly_tokens });
   fallback = () => this.req<Fallback>('GET', '/v1/settings/fallback');

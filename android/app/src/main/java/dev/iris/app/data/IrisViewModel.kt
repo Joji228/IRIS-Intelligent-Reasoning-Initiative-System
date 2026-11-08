@@ -3,6 +3,7 @@ package dev.iris.app.data
 import android.app.Application
 import android.os.Build
 import android.provider.Settings
+import dev.iris.app.BuildConfig
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -51,6 +52,21 @@ class IrisViewModel(app: Application) : AndroidViewModel(app) {
     var linkState by mutableStateOf(LinkState.Connecting)
         private set
     var signinError by mutableStateOf("")
+
+    /** The newest release the server knows of (it asks GitHub), and how updating this app is going. */
+    var update by mutableStateOf<UpdateStatus?>(null)
+        private set
+
+    /** 0..100 while the update downloads, otherwise null. */
+    var updateProgress by mutableStateOf<Int?>(null)
+        private set
+
+    /** What to tell the user about the update (a problem, or what to do next). */
+    var updateNote by mutableStateOf<String?>(null)
+
+    /** A newer version of this app than the one installed, if it can be installed from here. */
+    val phoneUpdate: Pair<UpdateRelease, UpdateAsset>?
+        get() = AppUpdate.offer(update, BuildConfig.VERSION_NAME)
     var deviceName by mutableStateOf("")
         private set
 
@@ -294,10 +310,46 @@ class IrisViewModel(app: Application) : AndroidViewModel(app) {
             refreshBalance()
             refreshPreviews()
             loadProblems()
+            checkUpdate()
             pendingOpen?.let { id -> pendingOpen = null; if (agents.any { it.id == id }) openAgent(id) }
             chatAgentId?.let { id -> if (agents.none { it.id == id }) goHome() else loadChat(id) }
         } catch (e: Exception) {
             error(e)
+        }
+    }
+
+    /** Asks the server for the newest release (quietly: an older server has no such answer). */
+    fun checkUpdate(refresh: Boolean = false) {
+        val api = api ?: return
+        viewModelScope.launch { runCatching { api.update(refresh) }.onSuccess { update = it } }
+    }
+
+    /** Downloads the new APK, checks it, and opens Android's installer. */
+    fun installUpdate() {
+        val (release, asset) = phoneUpdate ?: return
+        if (updateProgress != null) return
+        val context = getApplication<Application>()
+        updateNote = null
+        if (!AppUpdate.canInstall(context)) {
+            updateNote = "Android first has to allow I.R.I.S. to install apps. Switch it on in the screen that just opened, come back, and press Update again."
+            runCatching { context.startActivity(AppUpdate.allowInstallsIntent(context)) }
+            return
+        }
+        viewModelScope.launch {
+            updateProgress = 0
+            try {
+                val apk = AppUpdate.download(context, release, asset) { updateProgress = it }
+                if (!AppUpdate.signedLikeThisApp(context, apk)) {
+                    apk.delete()
+                    updateNote = "This update is signed with a different key than the app on your phone, so Android won't install it over this one. Uninstall I.R.I.S., install the new version from the release page, and pair the phone again."
+                } else {
+                    context.startActivity(AppUpdate.installIntent(context, apk))
+                }
+            } catch (e: Exception) {
+                updateNote = e.message ?: "The update didn't work."
+            } finally {
+                updateProgress = null
+            }
         }
     }
 

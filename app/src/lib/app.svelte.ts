@@ -29,6 +29,7 @@ import {
   type DefaultModel,
   type IrisEvent,
   type Limits,
+  type UpdateStatus,
   type QueuedMessage,
   type Message,
   type Mood,
@@ -120,6 +121,13 @@ class IrisApp {
   /** Web app only: the name this device paired as. */
   deviceName = $state('');
   engineVersion = $state('');
+  /** Whether a newer I.R.I.S. is out, and how an update is going (null until asked). */
+  update = $state<UpdateStatus | null>(null);
+  /** The engine said agents are working; the banner asks before stopping them. */
+  updateAsk = $state<string | null>(null);
+  /** An update is under way and this page is waiting for the engine to come back. */
+  updateWatching = $state(false);
+  private updateTimer: ReturnType<typeof setInterval> | null = null;
   agents = $state<Agent[]>([]);
   providers = $state<Provider[]>([]);
   /** Threads per agent id, most recent first. */
@@ -604,9 +612,61 @@ class IrisApp {
   }
 
   /** Full refetch: on first connect and after every reconnect. */
+  /** Asks the engine whether a newer I.R.I.S. is out (the engine asks GitHub). */
+  async checkUpdate(refresh = false) {
+    if (!this.api) return;
+    try {
+      this.update = await this.api.update(refresh);
+    } catch {
+      // An older engine has no updates yet, or GitHub can't be reached: nothing to show.
+    }
+  }
+
+  /** Presses "Update". If agents are working the engine says so first (`updateAsk`). */
+  async installUpdate(force = false) {
+    if (!this.api) return;
+    this.updateAsk = null;
+    try {
+      await this.api.installUpdate(force);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409 && !force) {
+        this.updateAsk = e.message;
+        return;
+      }
+      this.error(e);
+      return;
+    }
+    void this.watchUpdate();
+  }
+
+  /** While an update runs: show its progress, and say so when the new version is up. */
+  private async watchUpdate() {
+    if (this.updateWatching || !this.api) return;
+    const from = this.update?.current ?? '';
+    const started = Date.now();
+    this.updateWatching = true;
+    while (Date.now() - started < 10 * 60_000 && this.api) {
+      await new Promise((r) => setTimeout(r, 2000));
+      try {
+        const s = await this.api.update();
+        this.update = s;
+        if (s.current !== from) {
+          this.toast(`Updated to I.R.I.S. ${s.current}`);
+          break;
+        }
+        if (s.install.phase === 'failed') break;
+      } catch {
+        // The engine is restarting.
+      }
+    }
+    this.updateWatching = false;
+  }
+
   async refreshAll() {
     const api = this.api;
     if (!api) return;
+    void this.checkUpdate();
+    this.updateTimer ??= setInterval(() => void this.checkUpdate(), 60 * 60 * 1000);
     try {
       const [agents, providers, status, recent, approvals, toolsets, defaultModel, reasoning] = await Promise.all([
         api.agents(),

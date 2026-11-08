@@ -431,6 +431,9 @@ pub fn router(state: AppState) -> Router {
         .route("/settings/search", get(get_search).put(put_search))
         .route("/devices", get(list_devices).post(create_device))
         .route("/devices/{id}", delete(delete_device))
+        .route("/update", get(get_update))
+        .route("/update/install", post(post_update_install))
+        .route("/update/settings", axum::routing::put(put_update_settings))
         .route("/link", get(get_link).put(put_link))
         .route("/link/pair", post(new_pairing))
         .route("/link/login", axum::routing::put(put_link_login).delete(delete_link_login))
@@ -1897,6 +1900,45 @@ async fn delete_device(State(st): State<AppState>, Path(id): Path<String>) -> Ap
     } else {
         Err(ApiError::not_found("device"))
     }
+}
+
+// ---- updates (see update.rs) ----------------------------------------------------
+
+#[derive(Deserialize, Default)]
+struct UpdateQuery {
+    /// Ask GitHub now instead of reusing a recent answer.
+    #[serde(default)]
+    refresh: bool,
+}
+
+async fn get_update(State(st): State<AppState>, Query(q): Query<UpdateQuery>) -> Json<crate::update::Status> {
+    Json(crate::update::status(&st, q.refresh).await)
+}
+
+#[derive(Deserialize, Default)]
+struct InstallBody {
+    /// Go ahead even though agents are working (they are stopped).
+    #[serde(default)]
+    force: bool,
+}
+
+/// Starts the update; progress is in `GET /v1/update` (`install`).
+async fn post_update_install(State(st): State<AppState>, Json(body): Json<InstallBody>) -> ApiResult<StatusCode> {
+    match crate::update::start_install(&st, body.force).await {
+        Ok(()) => Ok(StatusCode::ACCEPTED),
+        Err(crate::update::Refusal::Busy(m)) => Err(ApiError::conflict(m)),
+        Err(crate::update::Refusal::Cannot(m)) => Err(ApiError::bad_request(m)),
+    }
+}
+
+#[derive(Deserialize)]
+struct UpdateSettings {
+    auto_check: bool,
+}
+
+async fn put_update_settings(State(st): State<AppState>, Json(body): Json<UpdateSettings>) -> ApiResult<Json<crate::update::Status>> {
+    config::set_update_check(&st.data_dir, body.auto_check)?;
+    Ok(Json(crate::update::status(&st, false).await))
 }
 
 // ---- remote access (I.R.I.S. Link) --------------------------------------------

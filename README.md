@@ -7,9 +7,9 @@
 **Your own team of AI agents, running on your own PC.**<br>
 Chat with them from your desktop, any browser, or your Android phone.
 
-<a href="https://github.com/Joji228/IRIS-Intelligent-Reasoning-Initiative-System/releases/download/v0.2.0/IRIS-Setup-x64-v0.2.0.exe"><img src="https://img.shields.io/badge/Download%20for%20Windows-v0.2.0-8b5cf6?style=for-the-badge" alt="Download for Windows (.exe)" height="40"></a>
+<a href="https://github.com/Joji228/IRIS-Intelligent-Reasoning-Initiative-System/releases/download/v0.2.1/IRIS-Setup-x64-v0.2.1.exe"><img src="https://img.shields.io/badge/Download%20for%20Windows-v0.2.1-8b5cf6?style=for-the-badge" alt="Download for Windows (.exe)" height="40"></a>
 &nbsp;
-<a href="https://github.com/Joji228/IRIS-Intelligent-Reasoning-Initiative-System/releases/download/v0.2.0/IRIS-Android-v0.2.0.apk"><img src="https://img.shields.io/badge/Download%20for%20Android-v0.2.0-34d399?style=for-the-badge&logo=android&logoColor=white" alt="Download for Android (.apk)" height="40"></a>
+<a href="https://github.com/Joji228/IRIS-Intelligent-Reasoning-Initiative-System/releases/download/v0.2.1/IRIS-Android-v0.2.1.apk"><img src="https://img.shields.io/badge/Download%20for%20Android-v0.2.1-34d399?style=for-the-badge&logo=android&logoColor=white" alt="Download for Android (.apk)" height="40"></a>
 
 <sub>Windows 10/11 (64-bit) · Android 10+ · Free and open source ([MIT](LICENSE))</sub>
 
@@ -44,7 +44,7 @@ Chat with them from your desktop, any browser, or your Android phone.
 
 ## Install (5 minutes)
 
-1. **Download** [**IRIS-Setup-x64-v0.2.0.exe**](https://github.com/Joji228/IRIS-Intelligent-Reasoning-Initiative-System/releases/download/v0.2.0/IRIS-Setup-x64-v0.2.0.exe) and run it.<br>
+1. **Download** [**IRIS-Setup-x64-v0.2.1.exe**](https://github.com/Joji228/IRIS-Intelligent-Reasoning-Initiative-System/releases/download/v0.2.1/IRIS-Setup-x64-v0.2.1.exe) and run it.<br>
    <sub>Windows may warn because the installer isn't signed yet: **More info → Run anyway**.</sub>
 2. **Add a model.** Open **Settings → Providers** and paste an API key, for example from [DeepSeek](https://platform.deepseek.com/) (cheap and capable).
 3. **Say hi to Iris.** Ask her anything, or press **+** and describe the agent you want.
@@ -70,9 +70,15 @@ At home, on the same Wi-Fi, nothing else is needed. To reach it from anywhere, y
    ```
 4. In I.R.I.S., open **Settings → Remote access**, paste that address, and turn it on.
 5. **Pair a device:**
-   - **Android:** install [**IRIS-Android-v0.2.0.apk**](https://github.com/Joji228/IRIS-Intelligent-Reasoning-Initiative-System/releases/download/v0.2.0/IRIS-Android-v0.2.0.apk) (allow installs from your browser when asked) and scan the QR code shown in Settings. Allow notifications, and set battery use to *Unrestricted* so they arrive.
+   - **Android:** install [**IRIS-Android-v0.2.1.apk**](https://github.com/Joji228/IRIS-Intelligent-Reasoning-Initiative-System/releases/download/v0.2.1/IRIS-Android-v0.2.1.apk) (allow installs from your browser when asked) and scan the QR code shown in Settings. Allow notifications, and set battery use to *Unrestricted* so they arrive.
      <br><sub>Coming from 0.1.0? Uninstall that one first: 0.2.0 is signed with a permanent key and Android won't update over an app signed with a different one. You pair the phone again; nothing on your PC is affected.</sub>
    - **Any browser:** open your relay address and scan the same QR code, or type the pairing code.
+
+## Updating
+
+I.R.I.S. checks this repository's releases every few hours. When a newer version is out, a bar at the top says so, with an **Update now** button: it downloads the installer, checks it against the checksum GitHub lists for the file, closes the app, installs, and opens it again. Your chats, agents and settings stay. The phone app shows the same news on its home screen and in Settings → About; it downloads the new APK, checks it, and Android asks you to confirm the install.
+
+The check only asks GitHub for the latest release (GitHub sees your IP address, like for any web request). To turn it off, clear the box in Settings → About, or set `check = false` under `[update]` in `iris.toml`.
 
 ## Safe by default
 

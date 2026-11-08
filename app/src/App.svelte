@@ -16,6 +16,7 @@
   import ContextMenu from './lib/components/ContextMenu.svelte';
   import CreditBadge from './lib/components/CreditBadge.svelte';
   import Toasts from './lib/components/Toasts.svelte';
+  import UpdateBanner from './lib/components/UpdateBanner.svelte';
 
   onMount(() => {
     void app.start();
@@ -62,6 +63,7 @@
         : `No connection to ${app.defaultModel?.provider_name ?? 'the AI provider'}: check the internet. Agents can't answer until it's back.`}
     </div>
   {/if}
+  <UpdateBanner />
   <div class="flex min-h-0 flex-1">
     <!-- Phones: the rail on the home screen; chats take the whole width -->
     <div class="h-full {app.view.kind === 'home' ? 'flex' : 'hidden md:flex'}">

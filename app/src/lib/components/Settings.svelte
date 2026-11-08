@@ -1820,6 +1820,74 @@
           <dt class="text-faint">License</dt>
           <dd>MIT</dd>
         </dl>
+
+        <!-- Updates: the engine looks on GitHub for a newer version; one button installs it -->
+        <h3 class="mt-8 text-[13px] font-semibold">Updates</h3>
+        {#if app.update}
+          {@const u = app.update}
+          <div class="mt-2 max-w-md space-y-3 text-[13px]">
+            {#if u.available && u.latest}
+              <p>
+                <span class="font-medium">I.R.I.S. {u.latest.version}</span> is available (you have {u.current}).
+              </p>
+              {#if u.latest.notes}
+                <p class="max-h-40 overflow-y-auto whitespace-pre-wrap rounded-lg bg-surface p-3 text-[12px] text-muted">{u.latest.notes}</p>
+              {/if}
+              {#if u.latest.windows && u.latest.windows.sha256}
+                <button
+                  class="btn-primary"
+                  disabled={u.install.phase === 'downloading' || u.install.phase === 'installing'}
+                  onclick={() => app.installUpdate()}
+                >
+                  {u.install.phase === 'downloading'
+                    ? `Downloading… ${u.install.percent}%`
+                    : u.install.phase === 'installing'
+                      ? 'Installing…'
+                      : 'Update now'}
+                </button>
+                <p class="text-[12px] text-faint">
+                  The installer is downloaded from GitHub and checked against its checksum before it runs. I.R.I.S.
+                  closes and opens again by itself; your chats, agents and settings stay.
+                </p>
+              {:else}
+                <p class="text-[12px] text-faint">
+                  This release can't be installed from here (no checked installer for Windows).
+                  <a class="underline" href={u.latest.page} target="_blank" rel="noreferrer">Open the release page</a>.
+                </p>
+              {/if}
+            {:else if u.error}
+              <p class="text-faint">Couldn't check for updates: {u.error}</p>
+            {:else}
+              <p>You have the newest version ({u.current}).</p>
+            {/if}
+            {#if u.install.phase === 'failed'}
+              <p class="text-danger">The last update didn't work: {u.install.error}</p>
+            {/if}
+            {#if u.last_update && !u.last_update.ok}
+              <p class="text-danger">The last update didn't finish (see the log below).</p>
+              <pre class="max-h-32 overflow-auto rounded-lg bg-surface p-2 text-[11px] text-muted">{u.last_update.log}</pre>
+            {/if}
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <button class="btn-outline" onclick={() => app.checkUpdate(true)}>Check now</button>
+              <label class="flex items-center gap-2 text-[12.5px] text-muted">
+                <input
+                  type="checkbox"
+                  checked={u.auto_check}
+                  onchange={async (e) => {
+                    try {
+                      app.update = await app.api!.setUpdateAutoCheck((e.currentTarget as HTMLInputElement).checked);
+                    } catch (err) {
+                      app.error(err);
+                    }
+                  }}
+                />
+                Look for updates by itself (asks GitHub every few hours)
+              </label>
+            </div>
+          </div>
+        {:else}
+          <p class="mt-2 text-[13px] text-faint">Update information isn't available from this engine yet.</p>
+        {/if}
       {/if}
     </div>
   </div>

@@ -436,3 +436,33 @@ export type IrisEvent =
   | { type: 'queue_changed'; thread_id: string; queue: QueuedMessage[] }
   | { type: 'device_added'; name: string }
   | { type: 'lagged'; missed: number };
+
+/** A file on a release (`IRIS-Setup-x64-v….exe` or `IRIS-Android-v….apk`). */
+export interface UpdateAsset {
+  name: string;
+  url: string;
+  size: number;
+  /** GitHub's checksum of the file; without it the file is never installed. */
+  sha256: string | null;
+}
+
+export interface UpdateRelease {
+  version: string;
+  notes: string;
+  published_at: string;
+  page: string;
+  windows: UpdateAsset | null;
+  android: UpdateAsset | null;
+}
+
+/** `GET /v1/update`: is a newer version out, and how is an update going. */
+export interface UpdateStatus {
+  current: string;
+  latest: UpdateRelease | null;
+  available: boolean;
+  checked_at: number;
+  error: string | null;
+  auto_check: boolean;
+  install: { phase: '' | 'downloading' | 'installing' | 'failed'; percent: number; error: string | null };
+  last_update: { ok: boolean; version: string; log: string; finished_at: number } | null;
+}

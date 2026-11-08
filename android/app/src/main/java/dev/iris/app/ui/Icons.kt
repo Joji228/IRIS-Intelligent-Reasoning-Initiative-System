@@ -169,6 +169,7 @@ object Lucide {
         "M6 6h.01", "M6 18h.01",
     )
     val Info get() = icon("info", circle(12f, 12f, 10f), "M12 16v-4", "M12 8h.01")
+    val Download get() = icon("download", "M12 15V3", "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", "m7 10 5 5 5-5")
     val Pencil get() = icon(
         "pencil",
         "M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z",

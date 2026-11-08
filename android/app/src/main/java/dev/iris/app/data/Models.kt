@@ -352,3 +352,26 @@ fun formatTokens(n: Long): String = when {
     n >= 1_000 -> "%.1f".format(n / 1_000.0).trimEnd('0').trimEnd('.') + "k"
     else -> n.toString()
 }
+
+// ---- updates (GET /v1/update, see crates/engine/src/update.rs) ----
+
+@Serializable
+data class UpdateAsset(val name: String, val url: String, val size: Long = 0, val sha256: String? = null)
+
+@Serializable
+data class UpdateRelease(
+    val version: String,
+    val notes: String = "",
+    val publishedAt: String = "",
+    val page: String = "",
+    val windows: UpdateAsset? = null,
+    val android: UpdateAsset? = null,
+)
+
+@Serializable
+data class UpdateStatus(
+    /** The server's version. */
+    val current: String = "",
+    val latest: UpdateRelease? = null,
+    val error: String? = null,
+)

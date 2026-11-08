@@ -58,6 +58,37 @@ pub struct Config {
     pub style: StyleConfig,
     #[serde(default)]
     pub link: crate::link::LinkConfig,
+    #[serde(default)]
+    pub update: UpdateConfig,
+}
+
+/// `[update]` in iris.toml: whether the engine looks on GitHub for new versions by itself.
+/// (Updating itself always waits for the user to press the button.)
+#[derive(Debug, Clone, Deserialize)]
+pub struct UpdateConfig {
+    #[serde(default = "yes")]
+    pub check: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+impl Default for UpdateConfig {
+    fn default() -> Self {
+        Self { check: true }
+    }
+}
+
+/// Saves `[update] check`.
+pub fn set_update_check(dir: &Path, check: bool) -> Result<()> {
+    let path = config_path(dir);
+    let mut doc = read_doc(&path)?;
+    if !doc.contains_key("update") {
+        doc["update"] = toml_edit::Item::Table(toml_edit::Table::new());
+    }
+    doc["update"]["check"] = toml_edit::value(check);
+    write_doc(&path, &doc)
 }
 
 /// `[style]` in iris.toml: how agents talk to the user. `preset` is one of

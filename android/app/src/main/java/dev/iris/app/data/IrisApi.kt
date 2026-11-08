@@ -109,6 +109,8 @@ class IrisApi(val link: LinkConnection) {
     /** A partial update: only the fields in [patch] change (snake_case keys). */
     suspend fun patchAgent(agentId: String, patch: JsonObject): Agent = send("PATCH", "/v1/agents/$agentId", patch)
     suspend fun limits(): Limits = get("/v1/settings/limits")
+    /** The newest published release (the server asks GitHub); [refresh] skips its cached answer. */
+    suspend fun update(refresh: Boolean = false): UpdateStatus = get(if (refresh) "/v1/update?refresh=true" else "/v1/update")
     suspend fun putLimits(daily: Long, weekly: Long): Limits =
         send("PUT", "/v1/settings/limits", buildJsonObject { put("daily_tokens", daily); put("weekly_tokens", weekly) })
     suspend fun search(): SearchStatus = get("/v1/settings/search")

@@ -344,6 +344,35 @@ private fun AboutPage(vm: IrisViewModel, back: () -> Unit) {
         }
         item {
             Card {
+                val offer = vm.phoneUpdate
+                val progress = vm.updateProgress
+                if (offer != null) {
+                    val (release, _) = offer
+                    CardTitle("Version ${release.version} is out", "You have ${BuildConfig.VERSION_NAME}. The update is downloaded from GitHub, checked against its checksum, and then Android asks you to confirm the install. Your chats and pairing stay.")
+                    if (release.notes.isNotBlank()) Txt(release.notes, 12.5.sp, C.muted)
+                    Button(
+                        if (progress != null) "Downloading… $progress%" else "Download and install",
+                        { vm.installUpdate() },
+                        icon = Lucide.Download,
+                        enabled = progress == null,
+                    )
+                } else {
+                    val latest = vm.update?.latest
+                    CardTitle(
+                        "Updates",
+                        when {
+                            vm.update == null -> "Looking for updates needs the server to answer."
+                            latest != null -> "You have the newest version (${BuildConfig.VERSION_NAME})."
+                            else -> "No published release was found yet."
+                        },
+                    )
+                    Button("Check now", { vm.checkUpdate(true) }, icon = Lucide.Info, primary = false)
+                }
+                vm.updateNote?.let { Txt(it, 12.5.sp, C.danger) }
+            }
+        }
+        item {
+            Card {
                 CardTitle("Unpair this phone", "Removes the pairing from this phone. To revoke it on the server too, remove it in Devices.")
                 Button("Unpair", {
                     overlays.menu("Unpair this phone?", listOf(MenuItem("Unpair", Lucide.LogOut, danger = true) { vm.signOut() }))
