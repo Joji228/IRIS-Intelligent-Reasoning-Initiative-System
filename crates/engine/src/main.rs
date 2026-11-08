@@ -14,6 +14,7 @@ mod events;
 mod link;
 mod mcp;
 mod memory;
+mod outside;
 mod modelctl;
 mod providers;
 mod recall;

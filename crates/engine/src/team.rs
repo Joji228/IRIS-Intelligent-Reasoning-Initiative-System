@@ -27,7 +27,7 @@ const MAX_REMOVE_WAIT: Duration = Duration::from_secs(3600);
 
 /// `thread_id` is the caller's own conversation (one-off agents it collects
 /// results from leave once that reply ends).
-pub async fn run(st: &AppState, me: &Agent, thread_id: &str, call: &ToolCall) -> ToolOutcome {
+pub async fn run(st: &AppState, me: &Agent, thread_id: &str, call: &ToolCall, tainted: bool) -> ToolOutcome {
     let args: Value = serde_json::from_str(if call.arguments.trim().is_empty() { "{}" } else { &call.arguments })
         .unwrap_or(Value::Null);
     let s = |k: &str| args[k].as_str().map(str::trim).filter(|v| !v.is_empty()).map(str::to_owned);
@@ -36,12 +36,12 @@ pub async fn run(st: &AppState, me: &Agent, thread_id: &str, call: &ToolCall) ->
         "create_agent" => match (s("name"), s("purpose")) {
             (Some(name), Some(purpose)) => {
                 let keep = args["keep"].as_bool().unwrap_or(false);
-                create(st, me, &name, &purpose, s("instructions"), &args["tools"], keep)
+                create(st, me, &name, &purpose, s("instructions"), &args["tools"], keep, tainted)
             }
             _ => err("Creating an agent failed", "`name` and `purpose` are required"),
         },
         "delegate_task" => match (s("agent"), s("task")) {
-            (Some(agent), Some(task)) => delegate(st, me, thread_id, &agent, &task),
+            (Some(agent), Some(task)) => delegate(st, me, thread_id, &agent, &task, tainted),
             _ => err("Delegating failed", "`agent` and `task` are required"),
         },
         "check_task" => match s("task_id") {
@@ -118,6 +118,24 @@ fn list(st: &AppState, me: &Agent) -> ToolOutcome {
     )
 }
 
+/// The tools a new agent gets: what was asked for among the grantable ones, or the defaults.
+/// After outside content was read (`tainted`) the shell is never handed out this way: a planted
+/// instruction could be behind the request, and the shell is where it would do harm.
+fn pick_tools(asked: &Value, tainted: bool) -> Vec<String> {
+    let tools: Vec<String> = asked
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|t| t.as_str())
+                .filter(|t| GRANTABLE_TOOLS.contains(t) && !(tainted && *t == "shell"))
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default();
+    if tools.is_empty() { DEFAULT_TOOLS.iter().map(|t| t.to_string()).collect() } else { tools }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn create(
     st: &AppState,
     me: &Agent,
@@ -126,6 +144,7 @@ fn create(
     instructions: Option<String>,
     tools: &Value,
     keep: bool,
+    tainted: bool,
 ) -> ToolOutcome {
     let summary = format!("Created agent “{name}”");
     let agents = match st.store.list_agents() {
@@ -141,13 +160,13 @@ fn create(
     if agents.iter().any(|a| a.name.eq_ignore_ascii_case(name)) {
         return err(format!("Couldn't create “{name}”"), format!("an agent named {name} already exists; delegate to it instead"));
     }
-    let mut tools: Vec<String> = tools
-        .as_array()
-        .map(|a| a.iter().filter_map(|t| t.as_str()).filter(|t| GRANTABLE_TOOLS.contains(t)).map(str::to_owned).collect())
-        .unwrap_or_default();
-    if tools.is_empty() {
-        tools = DEFAULT_TOOLS.iter().map(|t| t.to_string()).collect();
-    }
+    let asked_for_shell = tainted && tools.as_array().is_some_and(|a| a.iter().any(|t| t.as_str() == Some("shell")));
+    let tools = pick_tools(tools, tainted);
+    let shell_note = if asked_for_shell {
+        " (The shell was not given: this reply has read web pages or connected services, so ask the user before an agent gets it.)"
+    } else {
+        ""
+    };
     let used: Vec<String> = agents.iter().map(|a| a.color.clone()).collect();
     let system_prompt = format!(
         "You are {name}, a specialist agent on the user's I.R.I.S. team. Your purpose: {purpose}\n\
@@ -182,7 +201,7 @@ fn create(
             ok(
                 if keep { summary } else { format!("{summary} (one-off)") },
                 format!(
-                    "Created {} (tools: {}). {} of {MAX_AGENTS} slots now used. {lifetime} Give it work with delegate_task.",
+                    "Created {} (tools: {}). {} of {MAX_AGENTS} slots now used. {lifetime} Give it work with delegate_task.{shell_note}",
                     agent.name,
                     tools.join(", "),
                     agents.len() + 1
@@ -193,7 +212,7 @@ fn create(
     }
 }
 
-pub(crate) fn delegate(st: &AppState, me: &Agent, my_thread: &str, name: &str, task: &str) -> ToolOutcome {
+pub(crate) fn delegate(st: &AppState, me: &Agent, my_thread: &str, name: &str, task: &str, tainted: bool) -> ToolOutcome {
     let Some(target) = find(st, name) else {
         return err(format!("No agent called “{name}”"), format!("there is no agent called {name}; use list_agents or create_agent"));
     };
@@ -214,8 +233,11 @@ pub(crate) fn delegate(st: &AppState, me: &Agent, my_thread: &str, name: &str, t
             )
         }
     };
+    // A task written by an agent that had read outside content says so: what it asks may have
+    // been planted there, and the agent receiving it starts out cautious (see `outside.rs`).
+    let note = if tainted { format!("\n\n{}", crate::outside::TASK_NOTE) } else { String::new() };
     let content = format!(
-        "[Task from {} — your team's coordinator]\n\n{task}\n\nWhen you are done, reply with a clear summary of the result.",
+        "[Task from {} — your team's coordinator]\n\n{task}{note}\n\nWhen you are done, reply with a clear summary of the result.",
         me.name
     );
     match st.store.insert_message(&thread.id, MessageRole::User, &content, MessageStatus::Complete, None) {
@@ -283,6 +305,25 @@ async fn check(st: &AppState, me: &Agent, my_thread: &str, task_id: &str, wait_s
     match last {
         Some(m) if m.status == MessageStatus::Complete => {
             let mut output = format!("Result from {agent_name}:\n\n{}", truncate(&m.content, MAX_RESULT_CHARS));
+            // If that agent read outside content (or was handed a task that came from some),
+            // the result may carry text planted there: say so, and the reply collecting it is
+            // treated as having read outside content too.
+            let task_was_marked = st
+                .store
+                .list_messages(&thread.id)
+                .ok()
+                .map(|msgs| {
+                    let upto = msgs.iter().position(|x| x.id == task_id).unwrap_or(msgs.len());
+                    msgs[..upto]
+                        .iter()
+                        .rev()
+                        .find(|x| x.role == MessageRole::User)
+                        .is_some_and(|x| x.content.contains(crate::outside::TASK_NOTE_START))
+                })
+                .unwrap_or(false);
+            if crate::outside::reply_read_outside(&m) || task_was_marked {
+                output.push_str(&format!("\n\n{}", crate::outside::RESULT_NOTE));
+            }
             let mut summary = format!("{agent_name} finished the task");
             // One-off agents leave once the coordinator's reply ends.
             if let Some(a) = agent.filter(|a| a.role == TEMP_ROLE && a.created_by == me.id) {
@@ -428,5 +469,27 @@ pub fn after_reply(st: &AppState, thread_id: &str) {
             }
         }
         let _ = api::start_reply(st, coordinator, &coord_thread, cancel);
+    }
+}
+
+#[cfg(test)]
+mod injection_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn new_agents_get_what_was_asked_for_among_the_grantable_tools() {
+        assert_eq!(pick_tools(&json!(["web_search", "shell", "bogus", "team"]), false), vec!["web_search", "shell"]);
+        assert_eq!(pick_tools(&json!([]), false), vec!["web_search", "web_fetch", "get_time", "files"]);
+        assert_eq!(pick_tools(&Value::Null, false), vec!["web_search", "web_fetch", "get_time", "files"]);
+    }
+
+    #[test]
+    fn after_outside_content_no_agent_is_given_the_shell() {
+        assert_eq!(pick_tools(&json!(["web_search", "shell"]), true), vec!["web_search"]);
+        // Only the shell was wanted: the defaults, which have none.
+        let only_shell = pick_tools(&json!(["shell"]), true);
+        assert!(!only_shell.contains(&"shell".to_owned()));
+        assert_eq!(only_shell, vec!["web_search", "web_fetch", "get_time", "files"]);
     }
 }

@@ -842,7 +842,7 @@ async fn start_checker(st: &AppState, developer: &Agent, pending: &PendingUpdate
         pending.commit, pending.branch
     );
     let Ok(thread) = st.store.chat_thread(&developer.id, &developer.name) else { return };
-    let out = crate::team::delegate(st, developer, &thread.id, CHECKER_NAME, &task);
+    let out = crate::team::delegate(st, developer, &thread.id, CHECKER_NAME, &task, false);
     if !out.ok {
         post_note_and_reply(st, developer, &format!("{RELEASE_PREFIX} The checker couldn't start ({}): run code_verify yourself and report.", out.output));
     }

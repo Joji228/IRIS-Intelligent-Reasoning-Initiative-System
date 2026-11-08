@@ -63,16 +63,19 @@ fn previous_reply_read_outside_content(state: &AppState, thread_id: &str, curren
 }
 
 fn read_outside_content_before(messages: &[Message], current: &str) -> bool {
-    messages
+    // A task another agent handed over says whether that agent had read outside content.
+    let before: Vec<&Message> = messages.iter().take_while(|m| m.id != current).collect();
+    let handed_over = before
         .iter()
         .rev()
-        .find(|m| m.role == MessageRole::Assistant && m.id != current)
-        .is_some_and(|m| {
-            m.rounds.iter().flat_map(|r| &r.tools).any(|t| {
-                t.status == ToolStatus::Done
-                    && (tools::WEB_CONTENT_FUNCTIONS.contains(&t.name.as_str()) || t.name.starts_with(tools::MCP_PREFIX))
-            })
-        })
+        .find(|m| m.role == MessageRole::User)
+        .is_some_and(|m| m.content.contains(crate::outside::TASK_NOTE_START));
+    handed_over
+        || messages
+            .iter()
+            .rev()
+            .find(|m| m.role == MessageRole::Assistant && m.id != current)
+            .is_some_and(crate::outside::reply_read_outside)
 }
 
 pub async fn run(
@@ -92,6 +95,7 @@ pub async fn run(
         handed_off: Vec::new(),
         granted: Vec::new(),
         read_web: previous_reply_read_outside_content(&state, &thread_id, &reply_id),
+        private: String::new(),
         research: false,
     };
     let result = reply.generate(&cancel).await;
@@ -239,6 +243,9 @@ struct Reply<'a> {
     /// Whether this reply has read web content (pages can carry prompt
     /// injections): lasting changes then ask the user, and Careful auto is stricter.
     read_web: bool,
+    /// What the user's own tools returned in this reply (files, chats, command output…): what a
+    /// planted instruction would want to carry out. Only used to spot it leaving (see `outside.rs`).
+    private: String,
     /// The user asked for deep research (see [`RESEARCH_PREFIX`]).
     research: bool,
 }
@@ -571,7 +578,8 @@ impl Reply<'_> {
         }
         // Auto mode: a safety check may approve a command instead of the user.
         let mut auto = None;
-        let mode = self.state.auto_mode_for(self.agent);
+        // After outside content was read, Full auto stops skipping the command review.
+        let mode = crate::outside::effective_mode(self.state.auto_mode_for(self.agent), self.read_web);
         if allowed && call.name == "run_command" && mode != crate::api::AutoMode::Off {
             self.state.set_activity(self.thread_id, "reviewing", &tools::describe(call));
             let command = serde_json::from_str::<serde_json::Value>(&call.arguments)
@@ -619,6 +627,7 @@ impl Reply<'_> {
                 || crate::system::needs_approval(call, mode)
                 || crate::routines::needs_approval(call, mode)
                 || crate::settings::needs_approval(call, mode)
+                || self.leak_note(call).is_some()
                 || crate::browser::needs_approval(self.state, &self.agent.id, call, mode).await)
         {
             self.state.set_activity(self.thread_id, "waiting", &tools::describe(call));
@@ -658,9 +667,10 @@ impl Reply<'_> {
         } else if allowed {
             // Team and model tools need the whole engine.
             let (st, me) = (self.state.clone(), self.agent.clone());
+            let tainted = self.read_web;
             let work = async {
                 if tools::TEAM_FUNCTIONS.contains(&call.name.as_str()) {
-                    crate::team::run(&st, &me, self.thread_id, call).await
+                    crate::team::run(&st, &me, self.thread_id, call, tainted).await
                 } else if tools::ROUTINE_FUNCTIONS.contains(&call.name.as_str()) {
                     crate::routines::tool(&st, &me, call).await
                 } else if call.name == "list_accounts" {
@@ -714,10 +724,18 @@ impl Reply<'_> {
             }
         };
         // Connected services' results are outside content too (emails, issues…).
-        if outcome.ok && (tools::WEB_CONTENT_FUNCTIONS.contains(&call.name.as_str()) || call.name.starts_with(tools::MCP_PREFIX)) {
+        // (And a finished task from an agent that had read outside content.)
+        if crate::outside::taints(&call.name, outcome.ok, &outcome.output) {
             self.read_web = true;
         }
         let output = tools::truncate(&outcome.output, MAX_TOOL_OUTPUT_CHARS);
+        // What the user's own tools returned, kept to spot it leaving in a web address (capped).
+        if outcome.ok && crate::outside::is_private_tool(&call.name) && self.private.len() < 400_000 {
+            self.private.push('\n');
+            self.private.push_str(&output);
+        }
+        // Results from outside carry a label for the model (and show it in the step).
+        let output = crate::outside::label(&call.name, outcome.ok, output);
         let status = if outcome.ok { ToolStatus::Done } else { ToolStatus::Error };
         let summary = if auto.is_some() { format!("{} · auto-approved", outcome.summary) } else { outcome.summary };
         self.end_step(round, idx, status, summary, output.clone(), started);
@@ -801,7 +819,39 @@ impl Reply<'_> {
 
     /// Pauses until the user approves or denies the step. `None` if the reply
     /// is stopped first.
+    /// Why this call needs the user: it would carry the user's own text (from their files,
+    /// chats, memory or services) out in a web address or a form, in a reply that has read
+    /// outside content. That is how a planted instruction sends data away. (A heuristic: it
+    /// doesn't see text that was encoded first.)
+    fn leak_note(&self, call: &ToolCall) -> Option<String> {
+        if !self.read_web {
+            return None;
+        }
+        let args: serde_json::Value = serde_json::from_str(&call.arguments).ok()?;
+        let candidate = match call.name.as_str() {
+            "web_fetch" | "browser_open" => args["url"].as_str()?,
+            "browser_type" => args["text"].as_str()?,
+            _ => return None,
+        };
+        let mut private = self.private.clone();
+        // What the agent remembers about the user, and the summary of earlier chat, count too.
+        for text in [
+            crate::memory::read(&crate::memory::memory_path(&self.state.data_dir, &self.agent.id)),
+            crate::memory::read(&crate::memory::user_path(&self.state.data_dir)),
+            self.state.store.get_thread(self.thread_id).ok().flatten().map(|t| t.summary).unwrap_or_default(),
+        ] {
+            private.push('\n');
+            private.push_str(&text);
+        }
+        crate::outside::leaks(candidate, &private).then(|| {
+            "This contains text that also appears in your files, chats, memory or connected services, in a reply that has read \
+             web pages or connected services. A planted instruction may be sending it away. Approve only if you meant this."
+                .to_owned()
+        })
+    }
+
     async fn wait_for_approval(&mut self, round: usize, idx: usize, call: &ToolCall, cancel: &CancellationToken) -> Option<bool> {
+        let leak = self.leak_note(call);
         let approval = PendingApproval {
             id: new_id(),
             agent_id: self.agent.id.clone(),
@@ -811,8 +861,8 @@ impl Reply<'_> {
             arguments: call.arguments.clone(),
             summary: tools::describe(call),
             created_at: now_ms(),
-            // Code changes show the user the whole diff.
-            detail: crate::develop::approval_detail(call).await,
+            // Code changes show the user the whole diff; a possible leak says so.
+            detail: crate::develop::approval_detail(call).await.or(leak),
         };
         let (tx, rx) = oneshot::channel();
         self.state.approvals.lock().unwrap().insert(approval.id.clone(), (approval.clone(), tx));
@@ -1027,6 +1077,7 @@ fn system_prompt(state: &AppState, agent: &Agent, thread_id: &str, conn: &Conn, 
         prompt.push_str(&format!(" If that provider fails, replies switch to the fallback {m} ({}).", state.provider_name(&p)));
     }
     prompt.push_str(" Use tools when they make the answer more accurate; never invent their results.");
+    prompt.push_str(crate::outside::PROMPT_RULE);
     if agent.role != "main" {
         prompt.push_str(
             " If the user asks for something your tools can't do, don't refuse: ask Iris for the tools you need \
@@ -1127,5 +1178,17 @@ mod tests {
         let clean = reply("a1b", "assistant", &[("get_time", "done")]);
         assert!(!read_outside_content_before(&[web, user.clone(), clean, user, current], "a2"));
         assert!(!read_outside_content_before(&[], "a2"));
+    }
+
+    #[test]
+    fn a_task_from_an_agent_that_read_outside_content_starts_out_cautious() {
+        let mut task = reply("u1", "user", &[]);
+        task.content = format!("[Task from Iris — your team's coordinator]\n\nResearch X\n\n{}\n\nWhen you are done, reply.", crate::outside::TASK_NOTE);
+        let current = reply("a1", "assistant", &[]);
+        assert!(read_outside_content_before(&[task, current.clone()], "a1"), "the note on the task carries over");
+        // An ordinary task from a coordinator that had read nothing doesn't.
+        let mut plain = reply("u1", "user", &[]);
+        plain.content = "[Task from Iris — your team's coordinator]\n\nResearch X".into();
+        assert!(!read_outside_content_before(&[plain, current], "a1"));
     }
 }
