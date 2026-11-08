@@ -75,7 +75,7 @@ The phone app always connects through a relay, which keeps everything end-to-end
 4. In I.R.I.S., open **Settings → Remote access**, paste that address, and turn it on.
 5. **Pair a device:**
    - **Android:** install [**IRIS-Android-v0.2.3.apk**](https://github.com/Joji228/IRIS-Intelligent-Reasoning-Initiative-System/releases/download/v0.2.3/IRIS-Android-v0.2.3.apk) (allow installs from your browser when asked) and scan the QR code shown in Settings. Allow notifications, and set battery use to *Unrestricted* so they arrive.
-     <br><sub>Coming from 0.1.0? Uninstall that one first: 0.2.0 is signed with a permanent key and Android won't update over an app signed with a different one. You pair the phone again; nothing on your PC is affected.</sub>
+     <br><sub>Coming from 0.1.0? Uninstall that one first: since 0.2.0 the app is signed with a permanent key and Android won't update over an app signed with a different one. You pair the phone again; nothing on your PC is affected.</sub>
    - **Any browser:** open your relay address and scan the same QR code, or type the pairing code.
 
 ## Updating
@@ -99,8 +99,15 @@ On Windows with Git, Node.js, Rust and the VS C++ Build Tools (`scripts\server-s
 
 ```powershell
 scripts\build-windows.ps1                       # → target\release\bundle\nsis\IRIS_<version>_x64-setup.exe
+```
+
+The Android app also needs a JDK (17 or newer) and the Android SDK:
+
+```powershell
 cd android; .\gradlew assembleRelease           # → android\app\build\outputs\apk\release\app-release.apk
 ```
+
+<sub>An APK you build yourself is signed with a debug key, not the key of the downloads here, so Android won't install it over the downloaded app (or the other way round): uninstall one before installing the other.</sub>
 
 How it all works (engine, API, tools, team, relay, Android app): [docs/DEV.md](docs/DEV.md).
 
