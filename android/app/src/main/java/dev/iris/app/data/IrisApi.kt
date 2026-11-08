@@ -150,6 +150,20 @@ class IrisApi(val link: LinkConnection) {
     suspend fun refreshMcp(): List<McpServer> = send("POST", "/v1/mcp/refresh")
     suspend fun vault(): List<VaultAccount> = get("/v1/vault")
 
+    // ---- voice (docs/VOICE-PLAN.md): speech to text happens on the server, with Groq ----
+
+    suspend fun voice(): VoiceStatus = get("/v1/voice")
+
+    /**
+     * Turns one recorded clip into text. [data] is the clip, base64 (a WAV, about 32 KB per
+     * second); [language] is "" to detect it, or "el" / "en". The clip goes through the same
+     * sealed link as every other call; the Groq key never leaves the server.
+     */
+    suspend fun transcribe(data: String, mime: String, language: String = ""): Transcript = send(
+        "POST", "/v1/voice/transcribe",
+        buildJsonObject { put("data", data); put("mime", mime); put("language", language) },
+    )
+
     /** An attached file's bytes (images in user messages). */
     suspend fun attachment(threadId: String, id: String): ByteArray? {
         val res = link.request("GET", "/v1/attachments/$threadId/$id")

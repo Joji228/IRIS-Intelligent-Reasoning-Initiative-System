@@ -21,7 +21,7 @@
   const effort = $derived(ownReasoning ? agent.reasoning_effort : app.reasoningDefault);
   // Every provider's models, plus the one in use if its list lacks it.
   const groups = $derived(
-    app.providers
+    app.chatProviders
       .map((p) => {
         const models = [...(app.modelOptions[p.id] ?? [])];
         if (current?.provider === p.id && current.model && !models.includes(current.model)) models.unshift(current.model);

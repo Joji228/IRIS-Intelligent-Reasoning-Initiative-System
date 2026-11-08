@@ -11,6 +11,10 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // JitPack builds the WebRTC voice detector (docs/VOICE-PLAN.md); only its own group is taken from there.
+        maven("https://jitpack.io") {
+            content { includeGroup("com.github.gkonovalov.android-vad") }
+        }
     }
 }
 

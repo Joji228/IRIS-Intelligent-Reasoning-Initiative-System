@@ -11,6 +11,24 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- Lets the app hand a downloaded update to Android's installer (Android asks you to allow it once). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Voice: the microphone for "Try it" and calls (docs/VOICE-PLAN.md). Asked for the first time it's used. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- A call keeps recording with the screen off, which Android allows only through a foreground service of this kind. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <!-- Routes the call's sound (earpiece, loudspeaker, headset) and sets the "in a call" audio mode. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- Turns the screen off next to the ear (the proximity sensor). -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Older Android needs this to use a Bluetooth headset for the call. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
+    <!-- Lets the app see the phone's text-to-speech engines, to list their voices (Android 11+). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
 
     <application
         android:allowBackup="false"
@@ -48,6 +66,12 @@
             android:name=".data.LinkService"
             android:exported="false"
             android:foregroundServiceType="remoteMessaging" />
+
+        <!-- A voice call: keeps the microphone and the speaker going with the screen off. -->
+        <service
+            android:name=".data.CallService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
 
         <!-- Starts it again after a restart or an app update. -->
         <receiver

@@ -73,11 +73,12 @@ fun Txt(
     maxLines: Int = Int.MAX_VALUE,
     lineHeight: TextUnit = TextUnit.Unspecified,
     mono: Boolean = false,
+    align: androidx.compose.ui.text.style.TextAlign? = null,
 ) {
     BasicText(
         text,
         modifier = modifier,
-        style = style(size, color, weight, lineHeight, mono),
+        style = style(size, color, weight, lineHeight, mono).let { if (align != null) it.copy(textAlign = align) else it },
         maxLines = maxLines,
         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
     )

@@ -199,6 +199,7 @@ private fun Header(vm: IrisViewModel, agent: Agent) {
                 )
             }
         }
+        CallButton(vm, agent)
         IconButton(Lucide.Ellipsis, { agentMenu(vm, overlays, agent, inChat = true) }, C.muted)
     }
 }
@@ -238,7 +239,7 @@ private fun modelSheet(vm: IrisViewModel, overlays: Overlays, agent: Agent) = ov
                     }
                 }
                 val start = a.provider.ifEmpty { dm?.provider.orEmpty() }
-                if (vm.providers.size > 1) overlays.picker("Provider", vm.providers.map { it.id to it.name }, start) { choose(it) }
+                if (vm.chatProviders.size > 1) overlays.picker("Provider", vm.chatProviders.map { it.id to it.name }, start) { choose(it) }
                 else if (start.isNotEmpty()) choose(start)
             },
         )

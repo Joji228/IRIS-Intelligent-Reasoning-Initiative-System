@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Debug builds only: see res/xml/network_security_config.xml. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:networkSecurityConfig="@xml/network_security_config" />
+    <application android:networkSecurityConfig="@xml/network_security_config">
+        <!-- A layout preview of the call screen with made-up data (CallPreviewActivity.kt). -->
+        <activity android:name="dev.iris.app.CallPreviewActivity" android:exported="true" />
+    </application>
 </manifest>

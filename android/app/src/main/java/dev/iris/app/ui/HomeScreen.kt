@@ -229,7 +229,7 @@ private fun AgentRow(vm: IrisViewModel, agent: Agent) {
 }
 
 /** A chat line as plain text: no research tag, Markdown marks or line breaks. */
-private fun previewText(s: String) = s.removePrefix(Prefixes.RESEARCH)
+private fun previewText(s: String) = s.removePrefix(Prefixes.RESEARCH).removePrefix(Prefixes.VOICE)
     .replace(Regex("[#*_`>|]+"), "")
     .replace(Regex("\\s+"), " ")
     .trim()

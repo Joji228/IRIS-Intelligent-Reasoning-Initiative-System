@@ -43,6 +43,36 @@ question you may hand sub-questions to agents in parallel.
 3. Cross-check key claims; where sources disagree, say so.
 4. Write a report: a 3–5 line summary first, then sections. Cite every factual claim inline as [1], [2]… and end with \
 a \"Sources\" list: [n] Title — URL. Say plainly what you couldn't verify.";
+/// How a message spoken on a voice call starts (the phone app adds it and shows
+/// it as a small phone chip).
+pub const VOICE_PREFIX: &str = "[Voice call]";
+const VOICE_INSTRUCTIONS: &str = "\n\nVoice call mode (the user's latest message starts with [Voice call]):
+The user is talking to you on a voice call and your reply is read aloud. Their words were transcribed automatically, \
+so allow for small mistakes. The user speaks only English or Greek: answer in the one they spoke, and never in any \
+other language. If their message looks like another language or like nonsense, it is a transcription mistake: say \
+in English that you didn't catch that and ask them to repeat. Keep what you say short and \
+natural, 1–3 sentences unless they ask for more, with no markdown, lists, tables, emojis or URLs in the spoken part. \
+Before a task that takes more than a few seconds, first say one short sentence (for example \"On it, give me a \
+minute.\"). If the answer needs code, a table, links or a long report, say a one-sentence summary, then put the rest \
+after a line that is exactly [details]. The app shows that part in the chat and doesn't read it aloud. Approvals \
+can't be given by voice: when you need one, say that the user should check the screen.";
+
+/// Whether a user message is a spoken turn from a voice call.
+fn is_voice_message(content: &str) -> bool {
+    content.starts_with(VOICE_PREFIX)
+}
+
+/// The extra instructions a reply gets for the kind of message it answers
+/// (deep research or a voice call), or nothing for a normal message.
+fn mode_instructions(research: bool, voice: bool) -> &'static str {
+    if research {
+        RESEARCH_INSTRUCTIONS
+    } else if voice {
+        VOICE_INSTRUCTIONS
+    } else {
+        ""
+    }
+}
 /// Added to the history when the rounds run out.
 const WRAP_UP_NOTE: &str = "[Note from I.R.I.S.] You have used every tool step allowed for this reply. Do not \
 call any more tools. Give your final answer now from what you have found so far, and say briefly what you \
@@ -97,6 +127,7 @@ pub async fn run(
         read_web: previous_reply_read_outside_content(&state, &thread_id, &reply_id),
         private: String::new(),
         research: false,
+        voice: false,
     };
     let result = reply.generate(&cancel).await;
     state.runs.lock().unwrap().remove(&thread_id);
@@ -248,6 +279,8 @@ struct Reply<'a> {
     private: String,
     /// The user asked for deep research (see [`RESEARCH_PREFIX`]).
     research: bool,
+    /// The user is on a voice call (see [`VOICE_PREFIX`]): the reply is read aloud.
+    voice: bool,
 }
 
 /// Toolsets that make an agent a specialist, in families of the same kind of
@@ -311,13 +344,14 @@ impl Reply<'_> {
             Ok(false) => {}
             Err(e) => warn!("compacting {}'s chat failed: {e}", self.agent.name),
         }
-        self.research = self
+        let latest_user = self
             .state
             .store
             .list_messages(self.thread_id)
             .ok()
-            .and_then(|ms| ms.into_iter().rev().find(|m| m.role == MessageRole::User))
-            .is_some_and(|m| m.content.starts_with(RESEARCH_PREFIX));
+            .and_then(|ms| ms.into_iter().rev().find(|m| m.role == MessageRole::User));
+        self.research = latest_user.as_ref().is_some_and(|m| m.content.starts_with(RESEARCH_PREFIX));
+        self.voice = latest_user.as_ref().is_some_and(|m| is_voice_message(&m.content));
         let mut history = match self.build_history(&conn) {
             Ok(h) => h,
             Err(e) => return self.finish(MessageStatus::Error, Some(format!("Could not load the conversation: {e}")), Totals::default()),
@@ -356,7 +390,7 @@ impl Reply<'_> {
                             next.provider_name
                         );
                         conn = next;
-                        history[0] = ChatMessage::new(Role::System, system_prompt(self.state, self.agent, self.thread_id, &conn, self.research));
+                        history[0] = ChatMessage::new(Role::System, system_prompt(self.state, self.agent, self.thread_id, &conn, self.research, self.voice));
                         self.state.emit(Event::MessageDelta {
                             thread_id: self.thread_id.to_owned(),
                             message_id: self.reply_id.to_owned(),
@@ -978,7 +1012,7 @@ impl Reply<'_> {
         let skip = past.len().saturating_sub(MAX_HISTORY);
 
         let mut history = Vec::with_capacity(MAX_HISTORY * 2 + 1);
-        history.push(ChatMessage::new(Role::System, system_prompt(self.state, self.agent, self.thread_id, conn, self.research)));
+        history.push(ChatMessage::new(Role::System, system_prompt(self.state, self.agent, self.thread_id, conn, self.research, self.voice)));
         // Attachments: images from the last few messages that have them, the
         // full text of files in the last two; older ones shortened.
         let with_files: Vec<&str> =
@@ -1034,7 +1068,7 @@ impl Reply<'_> {
 
 /// The agent's instructions plus what it needs to know about its situation:
 /// the date, which model it runs on, the user's preferred style and its tools.
-fn system_prompt(state: &AppState, agent: &Agent, thread_id: &str, conn: &Conn, research: bool) -> String {
+fn system_prompt(state: &AppState, agent: &Agent, thread_id: &str, conn: &Conn, research: bool, voice: bool) -> String {
     // Order matters for cost: providers cache the unchanging start of a
     // request, so stable text comes first and what changes (memory, summary,
     // the clock) comes last.
@@ -1132,9 +1166,7 @@ fn system_prompt(state: &AppState, agent: &Agent, thread_id: &str, conn: &Conn, 
             ));
         }
     }
-    if research {
-        prompt.push_str(RESEARCH_INSTRUCTIONS);
-    }
+    prompt.push_str(mode_instructions(research, voice));
     prompt.push_str(&format!("\n\nNow: {}.", tools::now_line()));
     prompt
 }
@@ -1157,6 +1189,27 @@ mod tests {
             "prompt_tokens": null, "completion_tokens": null, "context_tokens": null, "created_at": 0
         }))
         .unwrap()
+    }
+
+    #[test]
+    fn the_voice_prefix_turns_the_call_instructions_on() {
+        assert!(is_voice_message("[Voice call] what's the weather like?"));
+        assert!(is_voice_message("[Voice call] τι ώρα είναι;"));
+        assert_eq!(mode_instructions(false, true), VOICE_INSTRUCTIONS);
+        assert!(VOICE_INSTRUCTIONS.contains("[details]"));
+        // Calls are English and Greek only.
+        assert!(VOICE_INSTRUCTIONS.contains("only English or Greek"));
+    }
+
+    #[test]
+    fn a_normal_message_gets_no_call_instructions() {
+        assert!(!is_voice_message("what's the weather like?"));
+        // The prefix only counts at the very start of the message.
+        assert!(!is_voice_message("I said [Voice call] earlier"));
+        assert!(!is_voice_message("[Deep research] solar panels"));
+        assert_eq!(mode_instructions(false, false), "");
+        // Deep research keeps its own instructions.
+        assert_eq!(mode_instructions(true, false), RESEARCH_INSTRUCTIONS);
     }
 
     #[test]

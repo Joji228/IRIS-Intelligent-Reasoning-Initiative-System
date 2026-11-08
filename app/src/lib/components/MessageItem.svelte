@@ -1,6 +1,7 @@
 <script lang="ts">
   import { CalendarClock, Check, CircleAlert, CircleCheck, Copy, FileText, RotateCcw } from '@lucide/svelte';
-  import { Rocket, Sparkles, Square, Telescope, Volume2 } from '@lucide/svelte';
+  import { Phone, Rocket, Sparkles, Square, Telescope, Volume2 } from '@lucide/svelte';
+  import { splitDetails } from '../details';
   import { app } from '../app.svelte';
   import { voice } from '../voice.svelte';
   import { clockTime } from '../time';
@@ -21,7 +22,8 @@
   const RELEASE_PREFIX = '[I.R.I.S. release]';
   // Matches the engine's chat::RESEARCH_PREFIX.
   const RESEARCH_PREFIX = '[Deep research]';
-
+  // Matches the engine's chat::VOICE_PREFIX: a turn spoken on a phone call.
+  const VOICE_PREFIX = '[Voice call]';
 
   let { message, agent, isLast }: { message: Message; agent?: Agent; isLast: boolean } = $props();
 
@@ -126,6 +128,7 @@
   {/if}
   {#if message.content}
   {@const deep = message.content.startsWith(RESEARCH_PREFIX)}
+  {@const call = message.content.startsWith(VOICE_PREFIX)}
   <!-- The user's own bubble (violet, right), with its time tucked in the corner -->
   <div class="group flex items-end justify-end gap-1 animate-fade-in" id="msg-{message.id}">
     <button
@@ -140,7 +143,7 @@
     <div
       class="selectable max-w-[78%] rounded-[20px] rounded-br-md bg-bubble-me px-4 pt-2 pb-1.5 text-[14.5px] leading-relaxed text-on-bubble-me whitespace-pre-wrap shadow-[0_6px_18px_-6px_color-mix(in_srgb,var(--c-bubble-me)_60%,transparent)]"
     >
-      {#if deep}<span class="mb-1 flex w-fit items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-medium"><Telescope size={11} /> Deep research</span>{/if}{deep ? message.content.slice(RESEARCH_PREFIX.length).trim() : message.content}<span class="msg-time float-right mt-2 ml-3 text-[10.5px] leading-none text-white/65 select-none">{clockTime(message.created_at)}</span>
+      {#if deep}<span class="mb-1 flex w-fit items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-medium"><Telescope size={11} /> Deep research</span>{/if}{#if call}<span class="mb-1 flex w-fit items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-medium"><Phone size={11} /> Voice call</span>{/if}{deep ? message.content.slice(RESEARCH_PREFIX.length).trim() : call ? message.content.slice(VOICE_PREFIX.length).trim() : message.content}<span class="msg-time float-right mt-2 ml-3 text-[10.5px] leading-none text-white/65 select-none">{clockTime(message.created_at)}</span>
     </div>
   </div>
   {/if}
@@ -160,7 +163,7 @@
           {#if lastRound.reasoning}
             <Thinking text={lastRound.reasoning} live={streaming && !lastRound.content} />
           {/if}
-          {#if lastRound.content}<div class="bubble"><Markdown text={lastRound.content} /></div>{/if}
+          {#if lastRound.content}{@render replyText(lastRound.content)}{/if}
           {#each lastRound.tools.filter((t) => t.name === 'ask_user') as step (step.id)}
             <QuestionCard {step} {answer} live={!streaming} />
           {/each}
@@ -172,7 +175,7 @@
           <Thinking text={round.reasoning} live={streaming && isLastRound && !round.content && round.tools.length === 0} />
         {/if}
         {#if round.content}
-          <div class="bubble"><Markdown text={round.content} /></div>
+          {@render replyText(round.content)}
         {/if}
         {#if round.tools.length}
           <div class="my-2.5 space-y-1.5">
@@ -251,6 +254,18 @@
     </div>
   </div>
 {/if}
+
+{#snippet replyText(text: string)}
+  <!-- A voice-call reply: what was said aloud, then a divider, then the details only shown here. -->
+  {@const parts = splitDetails(text)}
+  {#if parts.spoken}<div class="bubble"><Markdown text={parts.spoken} /></div>{/if}
+  {#if parts.details !== null}
+    <div class="my-2 flex items-center gap-2 text-[10.5px] tracking-wide text-faint uppercase select-none" aria-label="Details, not read aloud">
+      <span class="h-px flex-1 bg-line"></span>Details<span class="h-px flex-1 bg-line"></span>
+    </div>
+    {#if parts.details}<div class="bubble"><Markdown text={parts.details} /></div>{/if}
+  {/if}
+{/snippet}
 
 <style>
   /* The agent's bubble: hugs short replies, takes the full width for long ones. */

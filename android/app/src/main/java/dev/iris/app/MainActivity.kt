@@ -44,6 +44,9 @@ import dev.iris.app.data.Push
 import dev.iris.app.data.Screen
 import dev.iris.app.ui.AgentEditScreen
 import dev.iris.app.ui.ApprovalCard
+import dev.iris.app.ui.CallBackdropLayer
+import dev.iris.app.ui.CallScreen
+import dev.iris.app.ui.OnCallBar
 import dev.iris.app.ui.C
 import dev.iris.app.ui.ChatScreen
 import dev.iris.app.ui.ConnectionBar
@@ -110,6 +113,8 @@ private fun App(vm: IrisViewModel) {
         Box(Modifier.fillMaxSize().background(C.bg).pointerInput(Unit) {
             awaitPointerEventScope { while (true) { awaitPointerEvent(PointerEventPass.Initial); vm.touched() } }
         }) {
+            // The call's colored glow lives behind everything, so it reaches the screen's edges.
+            CallBackdropLayer(vm)
             AnimatedContent(
                 vm.conn == Conn.SignIn,
                 transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(200)) },
@@ -132,6 +137,7 @@ private fun Main(vm: IrisViewModel) {
     BackHandler(vm.stack.size > 1) { vm.back() }
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.ime))) {
         ConnectionBar(vm.linkState, vm.providerOnline) { vm.nudge() }
+        OnCallBar(vm)
         Box(Modifier.weight(1f)) {
             if (vm.conn == Conn.Starting && vm.agents.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Spinner(24.dp, C.faint) }
@@ -155,12 +161,14 @@ private fun Main(vm: IrisViewModel) {
                     contentKey = { it.first },
                     label = "screens",
                 ) { (screen, _) ->
-                    Box(Modifier.fillMaxSize().background(C.bg)) {
+                    // The call screen is see-through: the glow behind the window shows through it.
+                    Box(Modifier.fillMaxSize().background(if (screen is Screen.Call) androidx.compose.ui.graphics.Color.Transparent else C.bg)) {
                         when (screen) {
                             Screen.Home -> HomeScreen(vm)
                             is Screen.Chat -> vm.agent(screen.agentId)?.let { ChatScreen(vm, it) }
                             is Screen.Settings -> SettingsScreen(vm, screen.page)
                             is Screen.AgentEdit -> vm.agent(screen.agentId)?.let { AgentEditScreen(vm, it) }
+                            is Screen.Call -> vm.agent(screen.agentId)?.let { CallScreen(vm, it) }
                         }
                     }
                 }

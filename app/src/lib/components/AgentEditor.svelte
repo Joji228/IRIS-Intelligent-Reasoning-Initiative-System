@@ -171,7 +171,7 @@
           class="w-56! shrink-0"
           label="Provider"
           bind:value={provider}
-          options={[{ value: '', label: `Default · ${app.modelLabel()}` }, ...app.providers.map((p) => ({ value: p.id, label: p.name }))]}
+          options={[{ value: '', label: `Default · ${app.modelLabel()}` }, ...app.chatProviders.map((p) => ({ value: p.id, label: p.name }))]}
           onchange={() => {
             model = '';
             models = [];

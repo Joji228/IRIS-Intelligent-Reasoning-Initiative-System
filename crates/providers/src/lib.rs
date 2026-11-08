@@ -268,17 +268,39 @@ impl OpenAiCompatible {
         file_name: &str,
         mime: &str,
         language: Option<&str>,
+        prompt: Option<&str>,
     ) -> Result<String, ProviderError> {
-        // multipart/form-data by hand: three small fields and the file.
+        Ok(self.transcribe_detailed(model, audio, file_name, mime, language, prompt).await?.text)
+    }
+
+    /// Like [`transcribe`](Self::transcribe), but with what Whisper models report about
+    /// the clip: the language it detected and, per segment, how sure it is that there was
+    /// speech at all. That is what tells a real sentence from the "Thank you." Whisper
+    /// invents for silence and noise.
+    pub async fn transcribe_detailed(
+        &self,
+        model: &str,
+        audio: Vec<u8>,
+        file_name: &str,
+        mime: &str,
+        language: Option<&str>,
+        prompt: Option<&str>,
+    ) -> Result<Transcription, ProviderError> {
+        // multipart/form-data by hand: a few small fields and the file.
         let boundary = format!("iris{}", uuid_like());
         let mut body = Vec::with_capacity(audio.len() + 512);
         let mut field = |name: &str, value: &str| {
             body.extend_from_slice(format!("--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n").as_bytes());
         };
         field("model", model);
-        field("response_format", "json");
+        // Whisper models can report segments and the detected language; others only have plain JSON.
+        field("response_format", if model.starts_with("whisper") { "verbose_json" } else { "json" });
         if let Some(lang) = language.filter(|l| !l.is_empty()) {
             field("language", lang);
+        }
+        // A short hint (names the user is likely to say) so they are spelled right.
+        if let Some(p) = prompt.map(str::trim).filter(|p| !p.is_empty()) {
+            field("prompt", &p.replace(['\r', '\n'], " "));
         }
         let file_name = file_name.replace(['"', '\r', '\n'], "");
         body.extend_from_slice(
@@ -294,8 +316,11 @@ impl OpenAiCompatible {
             .timeout(Duration::from_secs(90))
             .send()
             .await?;
-        let v: Value = check_status(resp).await?.json().await?;
-        Ok(v["text"].as_str().unwrap_or_default().trim().to_owned())
+        let resp = check_status(resp).await?;
+        // The provider says how much of the free plan is left in its answer's headers.
+        let limits = parse_rate_limits(resp.headers());
+        let v: Value = resp.json().await?;
+        Ok(Transcription { limits, ..parse_transcription(&v) })
     }
 
     /// The JSON body of a streamed chat completion request.
@@ -425,6 +450,109 @@ where
         return Err(ProviderError::Stream("the connection closed before the answer was complete".into()));
     }
     Ok(out)
+}
+
+/// What a speech-to-text provider heard.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Transcription {
+    pub text: String,
+    /// The language Whisper detected ("english", "greek"…), when it says.
+    pub language: Option<String>,
+    /// Empty when the provider doesn't report segments.
+    pub segments: Vec<Segment>,
+    /// How much of the provider's request allowance is left, when its answer says (Groq does).
+    pub limits: Option<RateLimits>,
+}
+
+/// The request allowance a provider reports in its response headers
+/// (`x-ratelimit-limit-requests`, `-remaining-requests`, `-reset-requests`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RateLimits {
+    pub limit: u64,
+    pub remaining: u64,
+    /// Seconds until the allowance is full again.
+    pub reset_secs: f64,
+}
+
+/// Reads the allowance from response headers; `None` if the provider doesn't send it.
+pub fn parse_rate_limits(headers: &reqwest::header::HeaderMap) -> Option<RateLimits> {
+    let get = |name: &str| headers.get(name).and_then(|v| v.to_str().ok()).map(str::trim);
+    Some(RateLimits {
+        limit: get("x-ratelimit-limit-requests")?.parse().ok()?,
+        remaining: get("x-ratelimit-remaining-requests")?.parse().ok()?,
+        reset_secs: get("x-ratelimit-reset-requests").and_then(parse_duration_secs).unwrap_or(0.0),
+    })
+}
+
+/// "2d3h", "7m12.5s", "59.5s" or "120ms" as seconds.
+pub fn parse_duration_secs(text: &str) -> Option<f64> {
+    let (mut total, mut number, mut unit) = (0.0, String::new(), String::new());
+    let flush = |number: &mut String, unit: &mut String, total: &mut f64| -> Option<()> {
+        if number.is_empty() && unit.is_empty() {
+            return Some(());
+        }
+        let n: f64 = number.parse().ok()?;
+        *total += n * match unit.as_str() {
+            "d" => 86_400.0,
+            "h" => 3_600.0,
+            "m" => 60.0,
+            "s" => 1.0,
+            "ms" => 0.001,
+            _ => return None,
+        };
+        number.clear();
+        unit.clear();
+        Some(())
+    };
+    for c in text.trim().chars() {
+        if c.is_ascii_digit() || c == '.' {
+            // A digit after letters starts the next part ("7m" then "12.5s").
+            if !unit.is_empty() {
+                flush(&mut number, &mut unit, &mut total)?;
+            }
+            number.push(c);
+        } else {
+            unit.push(c);
+        }
+    }
+    flush(&mut number, &mut unit, &mut total)?;
+    Some(total)
+}
+
+/// One stretch of a transcript, with Whisper's own confidence numbers.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Segment {
+    pub text: String,
+    /// How likely it is that this part isn't speech at all (0..1).
+    pub no_speech_prob: f64,
+    /// Average log probability of the words (closer to 0 is more sure).
+    pub avg_logprob: f64,
+    /// How repetitive the text is (high = a stuck loop).
+    pub compression_ratio: f64,
+}
+
+/// Reads a `/audio/transcriptions` answer, plain or `verbose_json`.
+pub fn parse_transcription(v: &Value) -> Transcription {
+    let segments = v["segments"]
+        .as_array()
+        .map(|list| {
+            list.iter()
+                .map(|s| Segment {
+                    text: s["text"].as_str().unwrap_or_default().trim().to_owned(),
+                    // Missing numbers count as "fine", so providers without them are not filtered.
+                    no_speech_prob: s["no_speech_prob"].as_f64().unwrap_or(0.0),
+                    avg_logprob: s["avg_logprob"].as_f64().unwrap_or(0.0),
+                    compression_ratio: s["compression_ratio"].as_f64().unwrap_or(1.0),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Transcription {
+        text: v["text"].as_str().unwrap_or_default().trim().to_owned(),
+        language: v["language"].as_str().map(|l| l.trim().to_lowercase()).filter(|l| !l.is_empty()),
+        segments,
+        limits: None,
+    }
 }
 
 /// A multipart boundary unlikely to appear in the audio (clock-based; it only
@@ -737,6 +865,52 @@ mod tests {
         assert_eq!(Reasoning::parse("bogus"), Reasoning::Provider);
     }
 
+    #[test]
+    fn reads_a_verbose_transcript_with_its_confidence() {
+        let v = json!({
+            "text": " Hello there. ",
+            "language": "English",
+            "segments": [
+                {"text": " Hello there.", "no_speech_prob": 0.02, "avg_logprob": -0.21, "compression_ratio": 1.1}
+            ]
+        });
+        let t = parse_transcription(&v);
+        assert_eq!(t.text, "Hello there.");
+        assert_eq!(t.language.as_deref(), Some("english"));
+        assert_eq!(t.segments.len(), 1);
+        assert_eq!(t.segments[0].text, "Hello there.");
+        assert!((t.segments[0].no_speech_prob - 0.02).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_plain_transcript_has_no_segments_and_nothing_to_filter() {
+        let t = parse_transcription(&json!({"text": "ok"}));
+        assert_eq!(t, Transcription { text: "ok".into(), language: None, segments: vec![], limits: None });
+    }
+
+    #[test]
+    fn reads_durations_the_way_groq_writes_them() {
+        assert_eq!(parse_duration_secs("59.5s"), Some(59.5));
+        assert_eq!(parse_duration_secs("7m12.5s"), Some(432.5));
+        assert_eq!(parse_duration_secs("2d3h"), Some(2.0 * 86_400.0 + 3.0 * 3_600.0));
+        assert_eq!(parse_duration_secs("120ms"), Some(0.12));
+        assert_eq!(parse_duration_secs("1h2m3s"), Some(3_723.0));
+        assert_eq!(parse_duration_secs("soon"), None);
+    }
+
+    #[test]
+    fn reads_the_allowance_from_headers() {
+        let mut h = reqwest::header::HeaderMap::new();
+        h.insert("x-ratelimit-limit-requests", "2000".parse().unwrap());
+        h.insert("x-ratelimit-remaining-requests", "1843".parse().unwrap());
+        h.insert("x-ratelimit-reset-requests", "5h12m".parse().unwrap());
+        let l = parse_rate_limits(&h).unwrap();
+        assert_eq!((l.limit, l.remaining), (2000, 1843));
+        assert_eq!(l.reset_secs, 5.0 * 3600.0 + 12.0 * 60.0);
+        // A provider that doesn't send them has no allowance to show.
+        assert_eq!(parse_rate_limits(&reqwest::header::HeaderMap::new()), None);
+    }
+
     #[tokio::test]
     async fn transcribes_with_a_multipart_upload() {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -760,13 +934,14 @@ mod tests {
             String::from_utf8_lossy(&req).into_owned()
         });
         let client = OpenAiCompatible::new(format!("http://127.0.0.1:{port}/v1"), Some("k".into()));
-        let text = client.transcribe("whisper-1", b"RIFFfakewav".to_vec(), "clip.webm", "audio/webm", Some("el")).await.unwrap();
+        let text = client.transcribe("whisper-1", b"RIFFfakewav".to_vec(), "clip.webm", "audio/webm", Some("el"), Some("Iris, Atlas")).await.unwrap();
         assert_eq!(text, "hello there");
         let req = server.await.unwrap();
         assert!(req.starts_with("POST /v1/audio/transcriptions"), "{req}");
         assert!(req.contains("authorization: Bearer k") || req.contains("Authorization: Bearer k"));
         assert!(req.contains("name=\"model\"\r\n\r\nwhisper-1"));
         assert!(req.contains("name=\"language\"\r\n\r\nel"));
+        assert!(req.contains("name=\"prompt\"\r\n\r\nIris, Atlas"));
         assert!(req.contains("filename=\"clip.webm\"\r\nContent-Type: audio/webm\r\n\r\nRIFFfakewav"));
     }
 }

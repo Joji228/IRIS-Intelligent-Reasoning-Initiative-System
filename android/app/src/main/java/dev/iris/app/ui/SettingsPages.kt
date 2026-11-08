@@ -448,6 +448,7 @@ private fun ProvidersPage(vm: IrisViewModel, back: () -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Txt(p.name, 15.sp, C.text, FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     if (p.id == vm.defaultModel?.provider) Badge("Default", C.accentHi)
+                    if (p.voiceOnly) Badge("Speech to text only", C.muted)
                     Badge(if (p.hasKey) "Key saved" else "No key", if (p.hasKey) C.success else C.warn)
                 }
                 Txt(p.baseUrl, 12.sp, C.faint, mono = true, maxLines = 1)

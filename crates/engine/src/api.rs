@@ -207,6 +207,23 @@ impl AppState {
         self.providers.read().unwrap().get(id).is_some()
     }
 
+    /// Whether a provider is used for speech to text only (Groq), so it must
+    /// never be picked as a chat model.
+    fn is_voice_only_provider(&self, id: &str) -> bool {
+        self.providers.read().unwrap().get(id).is_some_and(|p| p.voice_only())
+    }
+
+    /// Checks a provider can be a chat model: it exists and isn't speech-only.
+    pub fn check_chat_provider(&self, id: &str) -> Result<(), String> {
+        if !self.has_provider(id) {
+            return Err(format!("unknown provider {id:?}"));
+        }
+        if self.is_voice_only_provider(id) {
+            return Err(format!("{} is only used for speech to text, not as a chat model", self.provider_name(id)));
+        }
+        Ok(())
+    }
+
     fn reload_providers(&self) -> anyhow::Result<()> {
         let cfg = config::load(&self.data_dir)?;
         *self.providers.write().unwrap() = Providers::from_config(&cfg.providers);
@@ -217,7 +234,7 @@ impl AppState {
     /// The provider and model an agent actually uses: its own if set, else
     /// the default from Settings, else the first provider's default model.
     pub fn resolve_model(&self, agent: &Agent) -> Option<(String, String)> {
-        if !agent.provider.is_empty() && !agent.model.is_empty() {
+        if !agent.provider.is_empty() && !agent.model.is_empty() && !self.is_voice_only_provider(&agent.provider) {
             return Some((agent.provider.clone(), agent.model.clone()));
         }
         self.default_model()
@@ -227,7 +244,8 @@ impl AppState {
         let d = self.defaults.read().unwrap().clone();
         let providers = self.providers.read().unwrap();
         if let (Some(p), Some(m)) = (d.provider, d.model) {
-            if providers.get(&p).is_some() && !m.trim().is_empty() {
+            // A speech-only provider (Groq) is never the chat model, even if one was saved.
+            if providers.get(&p).is_some_and(|x| !x.voice_only()) && !m.trim().is_empty() {
                 return Some((p, m));
             }
         }
@@ -241,7 +259,7 @@ impl AppState {
             return None;
         }
         let (p, m) = (d.fallback_provider?, d.fallback_model?);
-        (self.has_provider(&p) && !m.trim().is_empty()).then_some((p, m))
+        (self.check_chat_provider(&p).is_ok() && !m.trim().is_empty()).then_some((p, m))
     }
 
     pub fn provider_name(&self, id: &str) -> String {
@@ -324,9 +342,7 @@ impl AppState {
     /// Sets the model every agent uses (unless it has its own).
     pub fn set_default_model(&self, provider: &str, model: &str) -> Result<(), String> {
         let model = model.trim();
-        if !self.has_provider(provider) {
-            return Err(format!("unknown provider {provider:?}"));
-        }
+        self.check_chat_provider(provider)?;
         if model.is_empty() {
             return Err("model must not be empty".into());
         }
@@ -343,8 +359,8 @@ impl AppState {
     /// Sets the model used when the main one's provider fails.
     pub fn set_fallback(&self, enabled: bool, provider: &str, model: &str) -> Result<(), String> {
         let model = model.trim();
-        if enabled && !self.has_provider(provider) {
-            return Err(format!("unknown provider {provider:?}"));
+        if enabled {
+            self.check_chat_provider(provider)?;
         }
         if enabled && model.is_empty() {
             return Err("model must not be empty".into());
@@ -797,8 +813,8 @@ async fn create_agent(
     if new.name.trim().is_empty() {
         return Err(ApiError::bad_request("name must not be empty"));
     }
-    if !new.provider.is_empty() && !st.has_provider(&new.provider) {
-        return Err(ApiError::bad_request(format!("unknown provider {:?}", new.provider)));
+    if !new.provider.is_empty() {
+        st.check_chat_provider(&new.provider).map_err(ApiError::bad_request)?;
     }
     if !valid_reasoning(&new.reasoning_effort) {
         return Err(ApiError::bad_request(format!("unknown reasoning level {:?}", new.reasoning_effort)));
@@ -883,8 +899,8 @@ async fn patch_agent(
     Json(patch): Json<AgentPatch>,
 ) -> ApiResult<Json<Agent>> {
     if let Some(p) = &patch.provider {
-        if !p.is_empty() && !st.has_provider(p) {
-            return Err(ApiError::bad_request(format!("unknown provider {p:?}")));
+        if !p.is_empty() {
+            st.check_chat_provider(p).map_err(ApiError::bad_request)?;
         }
     }
     if patch.name.as_deref().is_some_and(|n| n.trim().is_empty()) {
@@ -1404,7 +1420,9 @@ async fn transcribe(State(st): State<AppState>, Json(clip): Json<VoiceClip>) -> 
         return Err(ApiError::bad_request("recordings must be between 1 byte and 24 MB"));
     }
     let lang = Some(clip.language.trim()).filter(|l| !l.is_empty());
-    let text = crate::voice::transcribe(&st, audio, &clip.mime, lang).await.map_err(ApiError::bad_request)?;
+    let text = crate::voice::transcribe(&st, audio, &clip.mime, lang).await.map_err(|e| {
+        ApiError(StatusCode::from_u16(e.status).unwrap_or(StatusCode::BAD_GATEWAY), e.message)
+    })?;
     Ok(Json(Transcript { text }))
 }
 

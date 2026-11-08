@@ -10,6 +10,7 @@ coroutines = "1.11.0"
 okhttp = "5.5.0"
 codeScanner = "16.1.0"
 junit = "4.13.2"
+vad = "2.0.10"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -26,6 +27,8 @@ kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 play-services-code-scanner = { group = "com.google.android.gms", name = "play-services-code-scanner", version.ref = "codeScanner" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+# WebRTC voice activity detection (MIT, ~158 KB native): finds where a spoken turn ends. Pinned.
+vad-webrtc = { group = "com.github.gkonovalov.android-vad", name = "webrtc", version.ref = "vad" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -87,8 +87,8 @@ Base URL `http://<server-ip>:7700`. The port can be changed with `IRIS_ADDR` or 
 | GET | `/v1/mcp` | Connected services: `[{name, transport, command, args, url, env_keys, header_keys, enabled, auto_approve, connected, error, tools}]` (secret values never come back) |
 | PUT, DELETE | `/v1/mcp/{name}` | `{command, args, url, env?, headers?, enabled, auto_approve}` (empty secret values keep the stored ones) → reconnects and returns the list / remove |
 | POST | `/v1/mcp/refresh` | Reconnect every server |
-| GET | `/v1/voice` | `{available, provider, model}`: whether speech to text works (needs a Groq or OpenAI provider) |
-| POST | `/v1/voice/transcribe` | `{data (base64), mime, language?}` → `{text}` (≤ 24 MB) |
+| GET | `/v1/voice` | `{available, provider, model, limits?}`: whether speech to text works (needs a Groq or OpenAI provider). `limits` is `{limit, remaining, resets_at}`: the free daily allowance of spoken turns as Groq last reported it in its response headers (kept in `voice-limits.json`; absent until the first spoken turn) |
+| POST | `/v1/voice/transcribe` | `{data (base64), mime, language?}` → `{text}` (≤ 24 MB; empty text for silence). Errors are short and speakable; **429** means the provider's free limit is used up, 502 the speech service failed or couldn't be reached |
 
 **Events** are JSON with a `type` field:
 - `hello`
@@ -215,7 +215,7 @@ Iris's instructions (`MAIN_SYSTEM_PROMPT`, plus the team rules added in `chat::s
 - **Heartbeat routines** (`routines.rs`, kind `heartbeat`): the agent goes through a checklist; a reply of exactly `HEARTBEAT_OK` removes the trigger and the reply from the chat (`last_result` "all clear"), anything else stays for the user.
 - **Deep research**: the composer's Research switch prefixes the message with `[Deep research]` (`chat::RESEARCH_PREFIX`); that reply gets research instructions in its system prompt and 45 steps instead of 25.
 - **Connections / MCP** (`mcp.rs`): servers in `secrets/mcp.json` (`mcpServers`, same format as other apps, plus `enabled` and `autoApprove`), stdio or Streamable HTTP, connected at start and on every change. Tools appear as `mcp__<server>__<tool>` for Iris and agents with the Connections switch (`mcp` toolset). A call asks unless the server marks the tool read-only or it's in `autoApprove` (`"*"` = all). A program that exits is reconnected by the next refresh.
-- **Voice** (`voice.rs`, `app/src/lib/voice.svelte.ts`): the mic records with MediaRecorder and `/v1/voice/transcribe` sends it to the first Groq (`whisper-large-v3-turbo`) or OpenAI (`gpt-4o-mini-transcribe`) provider with a key. Replies are read aloud with `speechSynthesis` (Windows voices, free, offline): the speaker button on a reply, and automatically after a dictated message.
+- **Voice** (`voice.rs`, `app/src/lib/voice.svelte.ts`): the mic records with MediaRecorder and `/v1/voice/transcribe` sends it to the first Groq (`whisper-large-v3`) or OpenAI (`gpt-4o-mini-transcribe`) provider with a key. Replies are read aloud with `speechSynthesis` (Windows voices, free, offline): the speaker button on a reply, and automatically after a dictated message. Phone calls are in [Voice calls](#voice-calls-phone--engine--groq) below.
 - **Self-development** (`develop.rs`, the `dev` toolset, the **Developer** agent, created once at start): the agent works in a git repo on the server, `C:\IRIS\repo` (`IRIS_REPO` overrides), on a branch `iris/<time>`. `code_status/search/read/edit/write/diff/discard` are free (only the branch changes). `code_apply` always asks, with the full diff in the approval card (`PendingApproval.detail`), then commits and runs `cargo test`, svelte-check and an AI review of the diff. `code_install` always asks, builds the installer from the repo, keeps the running build's installer as `C:\IRIS\releases\previous-setup.exe`, and starts `scripts/remote/self-update.ps1` through Task Scheduler: install, wait up to 2 min for `/health`, roll back if it doesn't answer, write `C:\IRIS\releases\update-result.json`. The new engine (`develop::resume`, via `dev-update.json` in the data dir) merges the branch into `main`, posts a `[I.R.I.S. release]` note, and has a one-off **Release Checker** (read-only code tools) run `code_verify` and report to the Developer. Iris has no code tools; she hands code requests to the Developer.
 - **Prompt-injection guards** (`chat.rs`): after a reply has read web pages or a connection's output (`WEB_CONTENT_FUNCTIONS`, `mcp__*`), lasting changes (`LASTING_FUNCTIONS`: settings, models, routines, tool requests, skills) ask the user, and Careful auto reviews commands more strictly. Replies never load remote images (Markdown images become links).
 
@@ -234,7 +234,7 @@ Every agent's system prompt says which model and provider it is running on right
 | `list_models` | Default model, fallback, agents with their own model, and each provider's live model list (≤60 ids each, 10 s timeout) |
 | `switch_model` | `{model, provider?, target?}`. `target`: `all` (default model), an agent name or `me` (its own model; `model: "default"` resets it), `fallback`, `fallback_off`. Without `provider` it uses the provider whose model list has that id (the default's first). Takes effect from the next reply |
 
-Providers: any OpenAI-compatible API. The app's "Add provider" offers presets (DeepSeek, OpenAI, Anthropic via its OpenAI-compatible endpoint, Gemini, OpenRouter, Groq, Mistral, xAI, Together, Ollama, LM Studio, custom). Earlier reasoning (`reasoning_content`) is only sent back to DeepSeek. Local providers (localhost) work without a key.
+Providers: any OpenAI-compatible API. The app's "Add provider" offers presets (DeepSeek, OpenAI, Anthropic via its OpenAI-compatible endpoint, Gemini, OpenRouter, Groq (speech to text only, never a chat model), Mistral, xAI, Together, Ollama, LM Studio, custom). Earlier reasoning (`reasoning_content`) is only sent back to DeepSeek. Local providers (localhost) work without a key.
 
 **Limits:**
 - At most **10 agents** (`MAX_AGENTS`), enforced in the API and in `create_agent`.
@@ -269,4 +269,57 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 - **Background:** the link closes a minute after the app leaves the screen (no pings all day) and reconnects when it's back.
 - **Questions, problems, notifications:** an agent's `ask_user` question shows as a card with answers to tap (or your own words), sent as your next message. Failed replies and routines show as a banner on Home and an inbox (Retry, Open chat, Dismiss). Notifications (`data/Push.kt`): while the app is in the background, `LinkService` keeps the link to the server open (a foreground service) and turns its events into notifications in per-kind channels (replies, questions, approvals, problems); a tap opens that agent's chat. No push service is involved. Notifications stay quiet while the app is on screen. Which kinds to show is chosen in Settings → Notifications and kept on the phone. Relay addresses (typed or from a pairing link) are always used over https.
 - **Attachments:** the + in the message box offers Photos (Android's photo picker: only the chosen photos are shared, no permission), Take a photo (the camera app, through a FileProvider in the cache) and Files (any file). Up to 10 per message; photos are re-encoded as JPEG at most 2048 px on the long side, other files may be up to 8 MB (a file travels base64 inside a sealed, base64 link frame, and OkHttp won't queue a frame over 16 MB). Each is uploaded with `POST /v1/threads/{id}/attachments`, then the message carries them.
-- **Not yet:** voice from the phone, fingerprint lock, share target (sending from other apps).
+- **Voice:** Settings → Voice and calls from the chat header's phone button (see [Voice calls](#voice-calls-phone--engine--groq)).
+- **Not yet:** fingerprint lock, share target (sending from other apps).
+
+## Voice calls (phone → engine → Groq)
+
+Plan and reasoning: [VOICE-PLAN.md](VOICE-PLAN.md). A call is the agent's normal chat; only the edges are new.
+
+```
+phone: mic → echo cancel → WebRTC VAD → one WAV clip per spoken turn
+   → POST /v1/voice/transcribe (through I.R.I.S. Link, sealed) → engine → Groq Whisper → text
+   → POST message "[Voice call] text" → agent replies, streamed as message_delta
+   → phone: sentence splitter → Android TextToSpeech
+```
+
+The Groq key never leaves the server; the phone never talks to Groq. **Groq is speech to text only**: `providers::is_voice_only` (any `groq.com` address) keeps it out of the default model, the fallback, an agent's own model, `switch_model` and the model pickers (`voice_only` on `GET /v1/providers`).
+
+**Engine:**
+- `chat.rs`: `VOICE_PREFIX` (`[Voice call]`). When the latest user message starts with it, `VOICE_INSTRUCTIONS` is added to the system prompt (short, speakable answers in the user's language; code, tables and long reports go after a line that is exactly `[details]`; approvals can't be given by voice).
+- `voice.rs`: Groq model `whisper-large-v3`; the agents' names are sent as Whisper's `prompt` so they are spelled right; transcripts that are only one of Whisper's silence phrases ("Thank you.", "Ευχαριστώ.", subtitle credits) become empty text; errors are short because the phone speaks them (429 → "Groq's free limit is used up for now; try again in a minute").
+- Whisper's own doubt is used (`response_format=verbose_json`): a stretch with `no_speech_prob > 0.8` (or > 0.5 with unsure words), a `compression_ratio > 2.4` loop or an `avg_logprob < -1.6` guess is dropped, which removes the invented "Thank you." on silence and noise. Repeated silence phrases are dropped too.
+- English and Greek only: if Whisper detects another language, the clip is asked again for `en` and for `el` and the surer answer is kept. The call instructions tell the agent never to answer in another language.
+- Free tier (Nov 2026): 20 requests/min, 2,000/day, 7,200 audio s/hour; each request counts as at least 10 s. The remaining count comes from `x-ratelimit-*-requests` headers and is shown as a bar in Settings → Voice.
+
+**Both UIs:** a user message starting with `[Voice call]` shows a phone chip; a `[details]` line in a reply shows as a divider (`app/src/lib/details.ts`, `data/Details.kt`).
+
+**Android files** (`android/app/src/main/java/dev/iris/app/`):
+
+| File | What |
+|---|---|
+| `data/Recorder.kt` | `AudioRecord` (VOICE_COMMUNICATION, 16 kHz mono) with echo canceller and noise suppressor; `Wav` wraps PCM in a WAV header |
+| `data/VoicePrefs.kt` | Settings → Voice choices (SharedPreferences file `iris`) |
+| `data/Speaker.kt` | `TextToSpeech` wrapper: voices, availability, a queue of sentences, `stop()` |
+| `data/SpeechText.kt` | `SpeechStream`: streamed reply text → sentences (splits at `. ! ? … ; ·` and line breaks followed by a space; not inside numbers, URLs or abbreviations; skips code; stops at a `[details]` line); `languageOf` (any Greek letter → Greek voice) |
+| `data/VoiceDetector.kt` | `VoiceDetector` interface and the WebRTC VAD behind it (`com.github.gkonovalov.android-vad:webrtc:2.0.10`, from JitPack, taken only for that group), so Silero can replace it later |
+| `data/CallLogic.kt` | Pure, unit-tested parts: `TurnDetector`, `callPhase`, `ProgressGate`, `ReplySpeech`, error classes, route choice |
+| `data/CallAudio.kt` | Audio mode `MODE_IN_COMMUNICATION`, audio focus, routing (earpiece, loudspeaker, Bluetooth), proximity wake lock |
+| `data/CallController.kt` | The call: audio loop, turn-taking, transcription, posting, speaking, events, errors |
+| `data/CallService.kt` | Foreground service of type `microphone` (ongoing "Call with Iris" notification with a timer and Hang up) |
+| `ui/VoicePage.kt`, `ui/CallScreen.kt` | Settings → Voice (status, language, voices, call options, "Try it") and the call screen |
+
+**Call flow.** The microphone runs as 20 ms frames through a `TurnDetector`:
+- A turn starts after 0.25 s of speech (a few quiet frames inside it are forgiven) and ends after the "Wait before answering" silence (0.5 / 0.8 / 1.2 s) or at 30 s. 0.3 s from before the speech is kept.
+- While the agent speaks (and 0.3 s after), the rule is stricter against echo: 0.4 s of steady speech. That also interrupts: the speaker stops at once, the rest of that reply isn't spoken, and the agent's work goes on. "Interrupt by talking" off ignores the microphone while it speaks.
+- Each turn is sent to `/v1/voice/transcribe` in order. Results shorter than three letters or digits are dropped. On 429 the call says "I've hit the free speech limit; give me a minute." and sends the same clip again after 30 s; if the link is down it says "I lost the connection to the server." and retries.
+- The text goes out as `[Voice call] …` with the normal send, so a busy agent's queue takes it. Phases: Listening → You speaking → Thinking → Speaking.
+- Replies: `message_delta` content (never reasoning) goes through `ReplySpeech`/`SpeechStream` into the speaker; a new round flushes the last unfinished sentence. While working, a short phrase from `Orbs.kt` is spoken when the step changes (at most one every 8 s, never over a reply sentence, and only if "Say what I'm doing" is on).
+- Approvals: "I need your OK on the screen." and the card on the call screen. They are never given by voice. An `ask_user` question is spoken, its buttons show on the screen, and a spoken answer is simply the next turn.
+- Keeping the call: `IrisViewModel.pause()` doesn't close the link while a call is on; `Push.inCall` stops the background notification link from posting a notification per reply; hanging up (screen, notification button, swiping the app away) restores the audio mode and stops the service.
+
+**Phone-side guards** (`CallLogic.kt`): a turn is only sent if it has at least 0.3 s of speech making up a fair part of the clip and its loudest frames reach about -41 dBFS (`isWorthTranscribing`); closing lines like "Thank you." are dropped (`isPhantomPhrase`, the same list as the server, so it works with an older server); text in a script other than Latin or Greek is dropped both ways (`hasForeignScript`); and what the phone itself said a moment ago is not taken as you (`looksLikeEcho`).
+
+**Call screen layout** (`ui/CallScreen.kt`): `CallContent` has no app state. The orb gets the height left after the header, status line, captions and buttons and is drawn to fit it, so it is never clipped; approvals sit above the captions, which scroll in their own area. The glow is `CallBackdropLayer`, a layer behind the whole window (under the status bar). Debug builds include `CallPreviewActivity`, which shows `CallContent` with made-up data: `adb shell am start -n dev.iris.app/.CallPreviewActivity --es phase speaking --ez long true --ez approval true` (phase: listening, you, thinking, speaking; also `muted`, `trouble`).
+
+**Testing.** `./gradlew testDebugUnitTest` covers WAV, settings, the splitter, turn detection (with a scripted detector), call phases, progress rate limits and reply speech. On the emulator the microphone works (Extended controls → Microphone → use the host's), the WebRTC VAD and the whole path to Groq can be exercised, but **test echo cancellation, Bluetooth and the proximity sensor on a real phone** (the emulator has none of them). Engine side: `cargo test` has the prefix, silence-phrase, error and Groq-is-voice-only tests; check the real thing by pressing the mic in the desktop message box, then **Try it** in Settings → Voice on the phone.

@@ -130,6 +130,10 @@ class IrisApp {
   private updateTimer: ReturnType<typeof setInterval> | null = null;
   agents = $state<Agent[]>([]);
   providers = $state<Provider[]>([]);
+  /** The providers that can be a chat model (Groq is for speech to text only). */
+  get chatProviders() {
+    return this.providers.filter((p) => !p.voice_only);
+  }
   /** Threads per agent id, most recent first. */
   threads = $state<Record<string, Thread[]>>({});
   recent = $state<Thread[]>([]);
@@ -481,7 +485,7 @@ class IrisApp {
     const api = this.api;
     if (!api) return;
     const loaded = await Promise.all(
-      this.providers.map(async (p) => [p.id, await api.models(p.id).catch(() => [] as string[])] as const),
+      this.chatProviders.map(async (p) => [p.id, await api.models(p.id).catch(() => [] as string[])] as const),
     );
     this.modelOptions = Object.fromEntries(loaded);
   }

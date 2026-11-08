@@ -68,6 +68,7 @@ import dev.iris.app.data.IrisViewModel
 import dev.iris.app.data.Message
 import dev.iris.app.data.Prefixes
 import dev.iris.app.data.Round
+import dev.iris.app.data.splitDetails
 import dev.iris.app.data.ToolStep
 import dev.iris.app.data.modelName
 import kotlinx.coroutines.Dispatchers
@@ -134,6 +135,7 @@ private fun UserMessage(vm: IrisViewModel, message: Message) {
         }
         if (message.content.isNotEmpty()) {
             val deep = message.content.startsWith(Prefixes.RESEARCH)
+            val call = message.content.startsWith(Prefixes.VOICE)
             val time = clock(message.createdAt)
             Column(
                 Modifier.widthIn(max = 310.dp)
@@ -147,12 +149,24 @@ private fun UserMessage(vm: IrisViewModel, message: Message) {
                         Txt("Deep research", 11.sp, Color.White, FontWeight.Medium)
                     }
                 }
+                if (call) {
+                    Pill(Modifier.padding(bottom = 4.dp), Color.White.copy(alpha = 0.15f)) {
+                        Icon(Lucide.Phone, Color.White, 11.dp)
+                        Txt("Voice call", 11.sp, Color.White, FontWeight.Medium)
+                    }
+                }
                 Box {
                     SelectionContainer {
                         // Room for the time at the end of the last line (it sits on top).
                         BasicText(
                             buildAnnotatedString {
-                                append(if (deep) message.content.removePrefix(Prefixes.RESEARCH).trim() else message.content)
+                                append(
+                                    when {
+                                        deep -> message.content.removePrefix(Prefixes.RESEARCH).trim()
+                                        call -> message.content.removePrefix(Prefixes.VOICE).trim()
+                                        else -> message.content
+                                    },
+                                )
                                 withStyle(SpanStyle(color = Color.Transparent, fontSize = 11.sp)) { append("\u2002\u2002$time") }
                             },
                             style = style(15.sp, Color.White, lineHeight = 22.sp),
@@ -216,7 +230,7 @@ private fun AssistantMessage(vm: IrisViewModel, message: Message, agent: Agent?,
                 }
                 if (finalIdx < rounds.size) {
                     if (lastRound.reasoning.isNotEmpty()) Thinking(lastRound.reasoning, streaming && lastRound.content.isEmpty())
-                    if (lastRound.content.isNotEmpty()) Bubble(lastRound.content, first = true)
+                    if (lastRound.content.isNotEmpty()) ReplyBubbles(lastRound.content, first = true)
                     for (step in lastRound.tools.filter { it.name == "ask_user" }) QuestionCard(vm, agent, step, answer, live = !streaming)
                 }
             } else {
@@ -225,7 +239,7 @@ private fun AssistantMessage(vm: IrisViewModel, message: Message, agent: Agent?,
                     if (round.reasoning.isNotEmpty()) {
                         Thinking(round.reasoning, streaming && isLastRound && round.content.isEmpty() && round.tools.isEmpty())
                     }
-                    if (round.content.isNotEmpty()) Bubble(round.content, first = rounds.subList(0, i).none { it.content.isNotEmpty() })
+                    if (round.content.isNotEmpty()) ReplyBubbles(round.content, first = rounds.subList(0, i).none { it.content.isNotEmpty() })
                     for (step in round.tools) {
                         if (step.name == "ask_user") QuestionCard(vm, agent, step, answer, live = !streaming) else ToolCard(vm, step)
                     }
@@ -499,7 +513,7 @@ private fun Caret() {
  * sends it as your next message; once answered the card shows what you chose.
  */
 @Composable
-private fun QuestionCard(vm: IrisViewModel, agent: Agent?, step: ToolStep, answer: String?, live: Boolean) {
+fun QuestionCard(vm: IrisViewModel, agent: Agent?, step: ToolStep, answer: String?, live: Boolean) {
     val a = remember(step.arguments) { args(step) }
     val question = (a?.get("question") as? JsonPrimitive)?.content.orEmpty()
     if (question.isEmpty() || agent == null) return
@@ -601,6 +615,26 @@ private fun Bubble(text: String, first: Boolean) {
         Modifier.background(C.bubble, shape).border(1.dp, C.bubbleLine, shape)
             .padding(horizontal = 15.dp, vertical = 10.dp),
     ) { SelectionContainer { Markdown(text) } }
+}
+
+/**
+ * A reply as one bubble, or, for a voice call reply with a `[details]` line, the part that
+ * was said aloud, a subtle divider, then the details that are only shown here.
+ */
+@Composable
+private fun ReplyBubbles(text: String, first: Boolean) {
+    val parts = remember(text) { splitDetails(text) }
+    if (parts.details == null) {
+        Bubble(text, first)
+        return
+    }
+    if (parts.spoken.isNotEmpty()) Bubble(parts.spoken, first)
+    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(Modifier.weight(1f).height(1.dp).background(C.line))
+        Txt("DETAILS", 10.5.sp, C.faint)
+        Box(Modifier.weight(1f).height(1.dp).background(C.line))
+    }
+    if (parts.details.isNotEmpty()) Bubble(parts.details, first = false)
 }
 
 private fun clock(ms: Long): String = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(ms))

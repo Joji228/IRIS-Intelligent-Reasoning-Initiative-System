@@ -105,11 +105,11 @@ fun AgentEditScreen(vm: IrisViewModel, agent: Agent) {
                 if (it.isEmpty()) { provider = ""; model = "" } else { provider = p; model = it }
             }
         }
-        if (vm.providers.size > 1) {
-            overlays.picker("Provider", listOf("" to defaultLabel) + vm.providers.map { it.id to it.name }, provider) {
+        if (vm.chatProviders.size > 1) {
+            overlays.picker("Provider", listOf("" to defaultLabel) + vm.chatProviders.map { it.id to it.name }, provider) {
                 if (it.isEmpty()) { provider = ""; model = "" } else chooseModel(it)
             }
-        } else chooseModel(provider.ifEmpty { default?.provider ?: vm.providers.firstOrNull()?.id.orEmpty() })
+        } else chooseModel(provider.ifEmpty { default?.provider ?: vm.chatProviders.firstOrNull()?.id.orEmpty() })
     }
 
     Page(agent.name, { vm.back() }, subtitle = "Agent settings", action = {

@@ -49,6 +49,8 @@ struct Prov {
     id: String,
     name: String,
     usable: bool,
+    /// Only used for speech to text (Groq): never offered as a chat model.
+    voice_only: bool,
     client: OpenAiCompatible,
 }
 
@@ -61,15 +63,20 @@ fn providers(st: &AppState) -> Vec<Prov> {
         .map(|p| Prov {
             id: p.id.clone(),
             name: p.name.clone(),
-            usable: p.key_source != KeySource::None
-                || p.base_url.contains("://localhost")
-                || p.base_url.contains("://127.0.0.1"),
+            usable: !p.voice_only()
+                && (p.key_source != KeySource::None
+                    || p.base_url.contains("://localhost")
+                    || p.base_url.contains("://127.0.0.1")),
+            voice_only: p.voice_only(),
             client: p.client.clone(),
         })
         .collect()
 }
 
 async fn models_of(p: &Prov) -> Result<Vec<String>, String> {
+    if p.voice_only {
+        return Err("speech to text only".into());
+    }
     if !p.usable {
         return Err("no API key".into());
     }
@@ -149,6 +156,9 @@ async fn resolve_provider(st: &AppState, model: &str, provider: Option<String>) 
             .iter()
             .find(|p| p.id.eq_ignore_ascii_case(&wanted) || p.name.eq_ignore_ascii_case(&wanted))
             .ok_or_else(|| format!("there is no provider called {wanted}; use list_models to see them"))?;
+        if p.voice_only {
+            return Err(format!("{} is only used for speech to text, not as a chat model", p.name));
+        }
         if !p.usable {
             return Err(format!("{} has no API key yet; the user can add it in Settings → Providers", p.name));
         }

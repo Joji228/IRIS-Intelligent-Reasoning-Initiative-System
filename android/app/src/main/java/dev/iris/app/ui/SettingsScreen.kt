@@ -39,6 +39,7 @@ private data class Section(val id: String, val title: String, val icon: androidx
 
 private val SECTIONS = listOf(
     Section("notifications", "Notifications", Lucide.Bell, "Push to this phone, what gets sent"),
+    Section("voice", "Voice", Lucide.Mic, "Speech, voices, calls"),
     Section("models", "Models", Lucide.Cpu, "Default model, thinking, auto mode, fallback"),
     Section("responses", "Personality & memory", Lucide.MessageText, "How agents talk, what they know about you"),
     Section("routines", "Routines", Lucide.Calendar, "What agents do on a schedule"),
@@ -76,6 +77,7 @@ fun SettingsScreen(vm: IrisViewModel, page: String?) {
         "search" -> SearchPage(vm, back)
         "about" -> AboutPage(vm, back)
         "notifications" -> NotificationsPage(vm, back)
+        "voice" -> VoicePage(vm, back)
         "problems" -> ProblemsPage(vm, back)
         else -> SettingsPage(vm, page, back)
     }
@@ -107,8 +109,8 @@ private fun ModelsPage(vm: IrisViewModel, back: () -> Unit) {
             if (list.isEmpty()) vm.showToast("${providerName(p)} didn't list any models")
             else overlays.picker(title, list.map { it to modelName(it).let { n -> if (n != it) "$n · $it" else it } }, current) { onPick(p, it) }
         }
-        if (vm.providers.size > 1) {
-            overlays.picker("Provider", vm.providers.map { it.id to it.name }, provider) { chooseModel(it) }
+        if (vm.chatProviders.size > 1) {
+            overlays.picker("Provider", vm.chatProviders.map { it.id to it.name }, provider) { chooseModel(it) }
         } else chooseModel(provider)
     }
 

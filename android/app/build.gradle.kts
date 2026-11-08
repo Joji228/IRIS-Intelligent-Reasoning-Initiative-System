@@ -16,8 +16,8 @@ android {
         targetSdk = 36
         // versionCode only ever goes up (Android refuses to install a lower one over the
         // app already on the phone); versionName is what the user sees.
-        versionCode = 5
-        versionName = "0.2.3"
+        versionCode = 6
+        versionName = "0.2.4"
     }
 
     // Release signing comes from keystore.properties next to this folder's settings file,
@@ -91,6 +91,8 @@ dependencies {
     // Scans the pairing QR with Google Play services' own scanner: no camera permission,
     // nothing bundled.
     implementation(libs.play.services.code.scanner)
+    // WebRTC voice activity detection for calls: finds where a spoken turn ends (MIT, JitPack).
+    implementation(libs.vad.webrtc)
 
     testImplementation(libs.junit)
 }

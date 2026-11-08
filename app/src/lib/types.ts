@@ -310,6 +310,8 @@ export interface Provider {
   default_model: string;
   has_key: boolean;
   key_source: 'inline' | 'env' | 'file' | 'none';
+  /** Only used for speech to text (Groq): never offered as a chat model. */
+  voice_only?: boolean;
 }
 
 export interface ProviderUpdate {

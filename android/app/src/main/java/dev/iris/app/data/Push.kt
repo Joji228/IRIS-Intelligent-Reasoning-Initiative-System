@@ -43,6 +43,9 @@ object Push {
     /** The app is on screen. */
     val foreground = MutableStateFlow(false)
 
+    /** A voice call is on: the app keeps its own link open, so the background one steps aside (no notification for every reply). */
+    val inCall = MutableStateFlow(false)
+
     /** The background link, for the "connected" notification and Settings. */
     val linkState = MutableStateFlow(LinkState.Offline)
 
@@ -177,7 +180,7 @@ class LinkService : Service() {
         else startForeground(1, first)
         // Connected only while the app is off screen (it has its own link then).
         watch = scope.launch {
-            combine(Push.foreground, Push.enabled) { front, on -> on && !front }.collect { needed ->
+            combine(Push.foreground, Push.enabled, Push.inCall) { front, on, call -> on && !front && !call }.collect { needed ->
                 if (needed) connect() else drop()
             }
         }

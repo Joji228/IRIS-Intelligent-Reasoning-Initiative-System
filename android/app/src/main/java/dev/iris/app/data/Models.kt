@@ -190,7 +190,32 @@ data class Provider(
     val hasKey: Boolean = false,
     /** inline, env, file, none */
     val keySource: String = "none",
+    /** Only used for speech to text (Groq): never offered as a chat model. */
+    val voiceOnly: Boolean = false,
 )
+
+/** `GET /v1/voice`: whether the server can turn speech into text, and with what. */
+@Serializable
+data class VoiceStatus(
+    val available: Boolean = false,
+    val provider: String? = null,
+    val model: String? = null,
+    /** What is left of the free daily allowance of spoken turns; null until the first turn has been sent. */
+    val limits: VoiceLimits? = null,
+)
+
+/** Groq's free plan: spoken turns per day, as the provider last reported it. */
+@Serializable
+data class VoiceLimits(
+    val limit: Long = 0,
+    val remaining: Long = 0,
+    /** When the allowance is full again (Unix seconds). */
+    val resetsAt: Long = 0,
+)
+
+/** `POST /v1/voice/transcribe`: the words in a clip (empty when there was only silence or noise). */
+@Serializable
+data class Transcript(val text: String = "")
 
 @Serializable
 data class DefaultModel(

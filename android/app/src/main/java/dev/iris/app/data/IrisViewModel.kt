@@ -16,13 +16,20 @@ import dev.iris.app.link.LinkCredentials
 import dev.iris.app.link.LinkState
 import dev.iris.app.link.SignIn
 import dev.iris.app.link.signInOnce
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 enum class Conn { SignIn, Starting, Online, Reconnecting }
@@ -33,6 +40,8 @@ sealed interface Screen {
     /** Settings: the list ([page] null) or one section. */
     data class Settings(val page: String? = null) : Screen
     data class AgentEdit(val agentId: String) : Screen
+    /** A voice call with an agent (the call itself lives in [IrisViewModel.call]). */
+    data class Call(val agentId: String) : Screen
 }
 
 /** Matches the engine's markers for notes it posts into chats (see MessageItem.svelte). */
@@ -41,6 +50,8 @@ object Prefixes {
     const val SETUP = "[I.R.I.S. setup]"
     const val RELEASE = "[I.R.I.S. release]"
     const val RESEARCH = "[Deep research]"
+    /** A turn spoken on a voice call (matches the engine's chat::VOICE_PREFIX). */
+    const val VOICE = "[Voice call]"
     const val ROUTINE = "[Routine:"
 }
 
@@ -107,6 +118,8 @@ class IrisViewModel(app: Application) : AndroidViewModel(app) {
     var defaultModel by mutableStateOf<DefaultModel?>(null)
         private set
     val providers = mutableStateListOf<Provider>()
+    /** The providers that can be a chat model (Groq is for speech to text only). */
+    val chatProviders: List<Provider> get() = providers.filter { !it.voiceOnly }
     var toast by mutableStateOf<String?>(null)
 
     private var link: LinkConnection? = null
@@ -149,6 +162,81 @@ class IrisViewModel(app: Application) : AndroidViewModel(app) {
     /** A notification was tapped: open that agent's chat (now, or once connected). */
     fun openFromNotification(agentId: String) {
         if (conn == Conn.Online && agents.any { it.id == agentId }) openAgent(agentId) else pendingOpen = agentId
+    }
+
+    // ---- voice calls -----------------------------------------------------------------------
+
+    /** The voice call in progress, if any (the call screen and the chat's phone button follow it). */
+    var call by mutableStateOf<CallController?>(null)
+        private set
+
+    /** Live events for the call: deltas, runs, approvals. */
+    private val callEvents = MutableSharedFlow<JsonObject>(extraBufferCapacity = 512, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    private val callHost = object : CallHost {
+        override val events: SharedFlow<JsonObject> = callEvents
+        override val online: Flow<Boolean> = snapshotFlow { linkState == LinkState.Online }
+
+        override fun threadId(agentId: String) = thread?.takeIf { it.agentId == agentId }?.id
+
+        override suspend fun transcribe(wavBase64: String, language: String): Result<String> =
+            quiet { transcribe(wavBase64, Wav.MIME, language) }.map { it.text }
+
+        override suspend fun send(agent: Agent, text: String): Boolean {
+            val done = CompletableDeferred<Boolean>()
+            this@IrisViewModel.send(agent, text, onDone = { done.complete(it) })
+            return done.await()
+        }
+
+        override fun stopReply() {
+            stop()
+        }
+
+        override fun pendingQuestion(agentId: String): String? {
+            if (thread?.agentId != agentId) return null
+            val last = messages.lastOrNull() ?: return null
+            if (last.role != "assistant") return null
+            val step = last.rounds.lastOrNull()?.tools?.lastOrNull { it.name == "ask_user" && it.status == "done" } ?: return null
+            return runCatching {
+                irisJson.parseToJsonElement(step.arguments.ifEmpty { "{}" }).jsonObject["question"]?.jsonPrimitive?.content
+            }.getOrNull()?.takeIf { it.isNotBlank() }
+        }
+
+        override fun onCallEnded(call: CallController) {
+            if (this@IrisViewModel.call === call) this@IrisViewModel.call = null
+            stack.removeAll { it is Screen.Call }
+            if (stack.isEmpty()) stack.add(Screen.Home)
+            // The background rule (the link closes a minute after the app leaves the screen) applies again.
+            if (!foreground) pause()
+        }
+    }
+
+    /**
+     * Starts a voice call with [agent] and opens the call screen. The microphone permission must
+     * already be granted (the screen asks for it); false if it isn't, or the server isn't reachable.
+     */
+    fun startCall(agent: Agent): Boolean {
+        call?.let {
+            open(Screen.Call(it.agent.id))
+            return true
+        }
+        if (conn != Conn.Online) {
+            showToast("Not connected to the server")
+            return false
+        }
+        val c = CallController(getApplication(), callHost, agent, viewModelScope)
+        if (!c.start()) return false
+        // The foreground service lets the call go on with the screen off; start it while the app is on screen.
+        if (!CallService.start(getApplication())) showToast("Android wouldn't keep the call alive in the background")
+        call = c
+        // The chat has to be loaded for the call's messages and replies.
+        if (thread?.agentId != agent.id) viewModelScope.launch { loadChat(agent.id) }
+        open(Screen.Call(agent.id))
+        return true
+    }
+
+    fun endCall() {
+        call?.hangUp()
     }
 
     private fun loadProblems() {
@@ -214,6 +302,7 @@ class IrisViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun signOut() {
+        call?.hangUp()
         disconnect()
         api = null
         store.forget()
@@ -282,7 +371,8 @@ class IrisViewModel(app: Application) : AndroidViewModel(app) {
         if (link == null) return
         pauseJob = viewModelScope.launch {
             delay(60_000)
-            disconnect()
+            // A voice call needs the link, with the screen off too; when it ends, pause() runs again.
+            if (call == null) disconnect()
         }
     }
 
@@ -423,8 +513,8 @@ class IrisViewModel(app: Application) : AndroidViewModel(app) {
     // ---- actions ---------------------------------------------------------------------
 
     fun send(agent: Agent, text: String, files: List<Upload> = emptyList(), onDone: (Boolean) -> Unit = {}) {
-        val api = api ?: return
-        if (text.isBlank() && files.isEmpty()) return
+        val api = api ?: return onDone(false)
+        if (text.isBlank() && files.isEmpty()) return onDone(false)
         viewModelScope.launch {
             try {
                 var tid = thread?.takeIf { it.agentId == agent.id }?.id
@@ -525,6 +615,18 @@ class IrisViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Like [attempt], but hands back the failure instead of showing a toast (the caller words it). */
+    suspend fun <T> quiet(block: suspend IrisApi.() -> T): Result<T> {
+        val api = api ?: return Result.failure(ApiException(0, "Not connected to the server"))
+        return try {
+            Result.success(api.block())
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     /** An agent changed in its editor (the event confirms it too). */
     fun agentSaved(a: Agent) = upsertAgent(a)
 
@@ -551,6 +653,7 @@ class IrisViewModel(app: Application) : AndroidViewModel(app) {
     // ---- live events -----------------------------------------------------------------
 
     private fun onEvent(e: JsonObject) {
+        if (call != null) callEvents.tryEmit(e)
         when (e.type) {
             "agent_updated" -> e.field<Agent>("agent")?.let { a ->
                 val isNew = agents.none { it.id == a.id }
@@ -633,6 +736,7 @@ class IrisViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun removeAgent(id: String) {
+        if (call?.agent?.id == id) call?.hangUp()
         agents.removeAll { it.id == id }
         recent.removeAll { it.agentId == id }
         if (stack.any { (it as? Screen.Chat)?.agentId == id || (it as? Screen.AgentEdit)?.agentId == id }) goHome()
@@ -698,6 +802,7 @@ class IrisViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        call?.hangUp()
         link?.stop()
     }
 

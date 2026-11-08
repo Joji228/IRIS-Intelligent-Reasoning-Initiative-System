@@ -65,7 +65,7 @@
 
   // ---- default model -----------------------------------------------------------
 
-  let dmProvider = $state(untrack(() => app.defaultModel?.provider ?? app.providers[0]?.id ?? ''));
+  let dmProvider = $state(untrack(() => app.defaultModel?.provider ?? app.chatProviders[0]?.id ?? ''));
   let dmModel = $state(untrack(() => app.defaultModel?.model ?? ''));
   let dmModels = $state<string[]>([]);
   let dmLoading = $state(false);
@@ -132,7 +132,7 @@
       fbSaved = f;
       fbEnabled = f.enabled;
       // Suggest a provider other than the default one.
-      fbProvider = f.provider || app.providers.find((p) => p.id !== app.defaultModel?.provider)?.id || app.providers[0]?.id || '';
+      fbProvider = f.provider || app.chatProviders.find((p) => p.id !== app.defaultModel?.provider)?.id || app.chatProviders[0]?.id || '';
       fbModel = f.model;
       void loadFallbackModels();
     } catch (e) {
@@ -796,13 +796,13 @@
             <div class="text-[14px] font-semibold">Default model</div>
             <p class="mb-3 text-[12.5px] text-faint">Every agent uses this model unless you give it its own (in the agent's settings).</p>
             <div class="flex flex-wrap items-end gap-2">
-              {#if app.providers.length > 1}
+              {#if app.chatProviders.length > 1}
                 <div class="w-full shrink-0 sm:w-40">
                   <label class="label" for="dm-provider">Provider</label>
                   <Select
                     id="dm-provider"
                     bind:value={dmProvider}
-                    options={app.providers.map((p) => ({ value: p.id, label: p.name }))}
+                    options={app.chatProviders.map((p) => ({ value: p.id, label: p.name }))}
                     onchange={() => loadDefaultModels(dmProvider)}
                   />
                 </div>
@@ -896,7 +896,7 @@
                   <Select
                     id="fb-provider"
                     bind:value={fbProvider}
-                    options={app.providers.map((p) => ({ value: p.id, label: p.name }))}
+                    options={app.chatProviders.map((p) => ({ value: p.id, label: p.name }))}
                     onchange={() => {
                       fbModel = '';
                       void loadFallbackModels();
@@ -989,6 +989,9 @@
                   <div class="min-w-0 flex-1">
                     <div class="flex items-center gap-2">
                       <span class="text-[14px] font-medium">{p.name}</span>
+                      {#if p.voice_only}
+                        <span class="rounded-full bg-hover px-2 py-0.5 text-[11px] text-faint" use:tip={'Used only to turn your voice into text. It is never a chat model.'}>Speech to text only</span>
+                      {/if}
                       <span
                         class="flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] {p.has_key
                           ? 'bg-success/10 text-success'
