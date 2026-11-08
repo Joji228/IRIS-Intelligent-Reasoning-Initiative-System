@@ -111,6 +111,8 @@ fun NotificationsPage(vm: IrisViewModel, back: () -> Unit) {
     val context = LocalContext.current
     val on by Push.enabled.collectAsState()
     val link by Push.linkState.collectAsState()
+    val running by Push.running.collectAsState()
+    val startError by Push.startError.collectAsState()
     val prefs by Push.choices.collectAsState()
     // Re-read when coming back from Android's battery screen.
     var unrestricted by remember { mutableStateOf(Push.unrestricted(context)) }
@@ -150,17 +152,19 @@ fun NotificationsPage(vm: IrisViewModel, back: () -> Unit) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Divider()
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Dot(if (link == LinkState.Online) C.success else C.faint)
+                            Dot(if (!running) C.danger else if (link == LinkState.Online) C.success else C.faint)
                             Txt(
-                                when (link) {
-                                    LinkState.Online -> "Connected in the background"
-                                    LinkState.ServerOffline -> "Your server is offline"
-                                    LinkState.Connecting -> "Connecting…"
-                                    LinkState.Offline -> "Standing by while the app is open"
+                                when {
+                                    !running -> "The background connection isn't running"
+                                    link == LinkState.Online -> "Connected in the background"
+                                    link == LinkState.ServerOffline -> "Your server is offline"
+                                    link == LinkState.Connecting -> "Connecting…"
+                                    else -> "Standing by while the app is open"
                                 },
-                                13.5.sp, C.muted,
+                                13.5.sp, if (running) C.muted else C.danger,
                             )
                         }
+                        startError?.let { Hint("Android refused to start it: $it", C.danger) }
                         Button("Send a test", {
                             Push.show(context, "replies", "I.R.I.S.", "Notifications work on this phone.", "test", null)
                         }, icon = Lucide.Send, primary = false)

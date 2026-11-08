@@ -16,3 +16,6 @@ keystore.properties
 *.apk
 *.aab
 
+
+# One-off helper that uploads the signing key to GitHub; stays on this PC.
+upload-signing-secrets.ps1

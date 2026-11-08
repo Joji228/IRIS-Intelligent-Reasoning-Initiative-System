@@ -174,6 +174,10 @@ class Session {
         this.onEvent(msg.e);
       } else if (msg.t === 'pong') {
         this.onPong();
+      } else if (msg.t === 'revoked') {
+        // This device was removed on the server: hang up. The reconnect signs in again,
+        // is refused, and sends the app back to its sign-in screen with the reason.
+        this.ws.close();
       } else if (msg.t === 'signed_in' || msg.t === 'error') {
         this.pendingSignIn?.(msg);
         this.pendingSignIn = null;

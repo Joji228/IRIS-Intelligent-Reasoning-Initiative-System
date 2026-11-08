@@ -370,9 +370,9 @@ class IrisViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- actions ---------------------------------------------------------------------
 
-    fun send(agent: Agent, text: String, onDone: (Boolean) -> Unit = {}) {
+    fun send(agent: Agent, text: String, files: List<Upload> = emptyList(), onDone: (Boolean) -> Unit = {}) {
         val api = api ?: return
-        if (text.isBlank()) return
+        if (text.isBlank() && files.isEmpty()) return
         viewModelScope.launch {
             try {
                 var tid = thread?.takeIf { it.agentId == agent.id }?.id
@@ -380,8 +380,17 @@ class IrisViewModel(app: Application) : AndroidViewModel(app) {
                     loadChat(agent.id)
                     tid = thread?.id ?: return@launch onDone(false)
                 }
-                val posted = api.postMessage(tid, text)
-                previews[agent.id] = ChatPreview(agent.id, "user", text.trim().take(160), System.currentTimeMillis())
+                // Files go up one by one first, then the message that carries them.
+                val attachments = files.map { api.uploadAttachment(tid, it) }
+                val posted = api.postMessage(tid, text, attachments)
+                val line = text.trim().ifEmpty {
+                    when {
+                        files.size > 1 -> "Sent ${files.size} files"
+                        files.first().isImage -> "Sent a photo"
+                        else -> "Sent ${files.first().name}"
+                    }
+                }
+                previews[agent.id] = ChatPreview(agent.id, "user", line.take(160), System.currentTimeMillis())
                 posted.userMessage?.let(::upsertMessage)
                 posted.assistantMessage?.let(::upsertMessage)
                 posted.queued?.let { q ->

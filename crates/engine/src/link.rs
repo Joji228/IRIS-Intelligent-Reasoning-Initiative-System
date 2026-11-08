@@ -740,6 +740,21 @@ mod tests {
         assert!(server2.unwrap().open(&wrong.seal(b"hi")).is_none());
     }
 
+    /// Fixed inputs for the key derivation and sealing. The phone app's test
+    /// (android/app/src/test/…/LinkCryptoTest.kt) checks the same numbers, so
+    /// the two sides cannot drift apart without a test failing on one of them.
+    #[test]
+    fn interop_vector() {
+        let (ss, ee) = ([0x11u8; 32], [0x22u8; 32]);
+        let client_pub = [&[4u8][..], &[0x33u8; 64]].concat();
+        let server_pub = [&[4u8][..], &[0x44u8; 64]].concat();
+        let (c2s, s2c) = derive(&ss, &ee, &client_pub, &server_pub);
+        assert_eq!(hex::encode(c2s), "0cdb65aeff6df44c02ced2402ca043a1e57926b163d9eeb5d3c82e8f36b6fe96");
+        assert_eq!(hex::encode(s2c), "7f64d85a2a88571cf19aa236978c4f8a11a2337da191f0124f76b4f9ad76398d");
+        assert_eq!(Seal::new(&s2c, &c2s, true).seal(b"hello iris"), r#"{"b":"FlzAP5+iFnkx3hL10dk7eQhQ/9vIXWLwHMQ=","s":1}"#);
+        assert_eq!(Seal::new(&c2s, &s2c, false).seal(b"hi engine"), r#"{"b":"D3dakGfWTbToWcf1QwsqhzW8XMqxM8vYHQ==","s":1}"#);
+    }
+
     #[test]
     fn switching_off_or_moving_the_relay_drops_the_connection() {
         let on = LinkConfig { url: "https://relay.example".into(), enabled: true };

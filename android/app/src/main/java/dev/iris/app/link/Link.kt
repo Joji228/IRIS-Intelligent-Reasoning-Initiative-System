@@ -114,6 +114,9 @@ class LinkSession private constructor(
             }
             "ev" -> msg["e"]?.jsonObject?.let { onEvent(it) }
             "pong" -> lastPong = System.currentTimeMillis()
+            // This device was removed on the server: hang up now. The reconnect signs in
+            // again, is refused, and sends the app back to its sign-in screen with the reason.
+            "revoked" -> close()
             "signed_in", "error" -> pendingSignIn?.complete(msg).also { pendingSignIn = null }
         }
     }

@@ -50,12 +50,22 @@ class IrisApi(val link: LinkConnection) {
     suspend fun clearChat(agentId: String): ThreadDetail = send("POST", "/v1/agents/$agentId/chat/clear")
     suspend fun compactChat(agentId: String): ThreadDetail = send("POST", "/v1/agents/$agentId/chat/compact")
 
-    suspend fun postMessage(threadId: String, content: String): Posted = send(
+    suspend fun postMessage(threadId: String, content: String, attachments: List<Attachment> = emptyList()): Posted = send(
         "POST",
         "/v1/threads/$threadId/messages",
         buildJsonObject {
             put("content", content)
-            putJsonArray("attachments") {}
+            putJsonArray("attachments") { attachments.forEach { add(irisJson.encodeToJsonElement(Attachment.serializer(), it)) } }
+        },
+    )
+
+    /** Uploads one file to a chat; the message that carries it is posted after. */
+    suspend fun uploadAttachment(threadId: String, upload: Upload): Attachment = send(
+        "POST",
+        "/v1/threads/$threadId/attachments",
+        buildJsonObject {
+            put("name", upload.name)
+            put("data", dev.iris.app.link.LinkCrypto.b64(upload.bytes))
         },
     )
 

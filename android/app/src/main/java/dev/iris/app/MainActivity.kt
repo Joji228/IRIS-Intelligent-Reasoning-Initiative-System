@@ -85,6 +85,8 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         Push.foreground.value = true
+        // On screen, Android always lets the background link start: make sure it's running.
+        if (Push.enabled.value) Push.start(this)
         // Phones pause sockets in the background: reconnect as soon as the app is back.
         vm.resume()
     }

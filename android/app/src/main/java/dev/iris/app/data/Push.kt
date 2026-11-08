@@ -81,8 +81,18 @@ object Push {
             .apply()
     }
 
+    /** The background service is alive (shown in Settings). */
+    val running = MutableStateFlow(false)
+
+    /** Why the background link couldn't start last time (shown in Settings), or null. */
+    val startError = MutableStateFlow<String?>(null)
+
     internal fun start(context: Context) {
+        // Android refuses to start it while the app is in the background (a sleeping phone,
+        // a delivery the system held back); the app starts it again when it's on screen.
         runCatching { context.startForegroundService(Intent(context, LinkService::class.java)) }
+            .onSuccess { startError.value = null }
+            .onFailure { startError.value = it.message ?: it.javaClass.simpleName }
     }
 
     /** Samsung and others pause background apps unless they're allowed to run unrestricted. */
@@ -122,6 +132,15 @@ object Push {
     /** Shows one notification; the same tag replaces the earlier one (one per chat or approval). */
     fun show(context: Context, channel: String, title: String, body: String, tag: String, agentId: String?) {
         channels(context)
+        // On a locked phone with a PIN, pattern or password, Android shows this plainer version
+        // instead of the text of the reply (if the phone is set to hide private notification content,
+        // which is the phone's own choice; unlocked, or with the content allowed, nothing changes).
+        val plain = Notification.Builder(context, channel)
+            .setSmallIcon(R.drawable.ic_notify)
+            .setColor(0xFF8B5CF6.toInt())
+            .setContentTitle("I.R.I.S.")
+            .setContentText("New notification")
+            .build()
         val notification = Notification.Builder(context, channel)
             .setSmallIcon(R.drawable.ic_notify)
             .setColor(0xFF8B5CF6.toInt())
@@ -130,6 +149,8 @@ object Push {
             .setStyle(Notification.BigTextStyle().bigText(body))
             .setContentIntent(openApp(context, agentId))
             .setAutoCancel(true)
+            .setVisibility(Notification.VISIBILITY_PRIVATE)
+            .setPublicVersion(plain)
             .build()
         runCatching { context.getSystemService(NotificationManager::class.java).notify(tag, 0, notification) }
     }
@@ -149,6 +170,7 @@ class LinkService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        Push.running.value = true
         Push.channels(this)
         val first = status(LinkState.Connecting)
         if (Build.VERSION.SDK_INT >= 34) startForeground(1, first, ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING)
@@ -174,6 +196,7 @@ class LinkService : Service() {
     }
 
     override fun onDestroy() {
+        Push.running.value = false
         drop()
         scope.cancel()
         super.onDestroy()
@@ -204,7 +227,14 @@ class LinkService : Service() {
             creds, scope,
             onEvent = { e -> scope.launch { runCatching { onEvent(l, e) } } },
             onOpen = { scope.launch { runCatching { refresh(l) } } },
-            onSignedOut = { Push.disable(this) },
+            onSignedOut = { reason ->
+                // Say so, instead of notifications quietly stopping.
+                Push.show(
+                    this, "problems", "This phone was signed out of I.R.I.S.",
+                    "${reason.replaceFirstChar { it.uppercase() }.trimEnd('.')}. Open the app to sign in again.", "signed-out", null,
+                )
+                Push.disable(this)
+            },
             // Less often than on screen: easier on the battery, still inside the relay's 45 s.
             pingEvery = 30_000,
         )

@@ -1,5 +1,20 @@
 package dev.iris.app.ui
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.offset
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.FileProvider
+import dev.iris.app.data.Upload
+import dev.iris.app.data.Uploads
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -405,71 +420,191 @@ private fun Composer(
     running: Boolean,
     enabled: Boolean,
 ) {
+    val context = LocalContext.current
+    val overlays = LocalOverlays.current
+    val scope = rememberCoroutineScope()
     var research by rememberSaveable(agent.id) { mutableStateOf(false) }
     var focused by remember { mutableStateOf(false) }
+    // Files waiting to go with the next message, and whether a send is uploading them.
+    val files = remember(agent.id) { mutableStateListOf<Upload>() }
+    var reading by remember { mutableStateOf(0) }
+    var sending by remember { mutableStateOf(false) }
     val haptics = LocalHapticFeedback.current
-    val canSend = text.isNotBlank() && enabled
+    val canSend = (text.isNotBlank() || files.isNotEmpty()) && enabled && !sending && reading == 0
     val shape = RoundedCornerShape(28.dp)
     val edge by animateColorAsState(if (focused) C.accent.copy(alpha = 0.45f) else C.lineStrong, tween(200), label = "edge")
 
+    fun add(uris: List<Uri>) {
+        val room = Uploads.MAX_FILES - files.size
+        if (uris.size > room) vm.showToast("Up to ${Uploads.MAX_FILES} files per message")
+        for (uri in uris.take(room.coerceAtLeast(0))) {
+            reading++
+            scope.launch {
+                try {
+                    files.add(Uploads.read(context, uri))
+                } catch (e: Uploads.TooBig) {
+                    vm.showToast(e.message ?: "That file is too large")
+                } catch (e: Exception) {
+                    vm.showToast("Couldn't read that file")
+                } finally {
+                    reading--
+                }
+            }
+        }
+    }
+    val photos = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(Uploads.MAX_FILES)) { add(it) }
+    val documents = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { add(it) }
+    var shot by rememberSaveable { mutableStateOf<String?>(null) }
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        shot?.let { if (ok) add(listOf(Uri.parse(it))) }
+        shot = null
+    }
+    fun attach() = overlays.menu(
+        "Attach",
+        listOf(
+            MenuItem("Photos", Lucide.Image) {
+                photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            },
+            MenuItem("Take a photo", Lucide.Camera) {
+                val dir = java.io.File(context.cacheDir, "camera").apply { mkdirs() }
+                val file = java.io.File(dir, "photo-${System.currentTimeMillis()}.jpg")
+                val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+                shot = uri.toString()
+                runCatching { camera.launch(uri) }.onFailure { vm.showToast("No camera app found") }
+            },
+            MenuItem("Files", Lucide.FileText) { documents.launch(arrayOf("*/*")) },
+        ),
+    )
+
     fun submit() {
         if (!canSend) return
-        val body = if (research) "${Prefixes.RESEARCH} ${text.trim()}" else text.trim()
+        val typed = text.trim()
+        val body = if (research && typed.isNotEmpty()) "${Prefixes.RESEARCH} $typed" else typed
+        val sendingFiles = files.toList()
         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         onText("")
+        files.clear()
         research = false
-        vm.send(agent, body) { ok -> if (!ok) onText(text) }
+        sending = true
+        vm.send(agent, body, sendingFiles) { ok ->
+            sending = false
+            // Keep what was typed and attached if it didn't go through.
+            if (!ok) {
+                onText(text)
+                files.addAll(0, sendingFiles)
+            }
+        }
     }
 
-    Row(
+    Column(
         Modifier.padding(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 10.dp).fillMaxWidth()
-            .background(C.surface, shape).border(1.dp, edge, shape).padding(5.dp),
-        verticalAlignment = Alignment.Bottom,
+            .background(C.surface, shape).border(1.dp, edge, shape).padding(5.dp)
+            .animateContentSize(Motion.standard()),
     ) {
-        // Deep research: an icon, which grows a label while it's on.
-        Row(
-            Modifier.height(46.dp).widthIn(min = 46.dp).clip(RoundedCornerShape(50))
-                .background(if (research) C.accentSoft else androidx.compose.ui.graphics.Color.Transparent, RoundedCornerShape(50))
-                .press { research = !research; haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
-                .padding(horizontal = 13.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Lucide.Telescope, if (research) C.accentHi else C.muted, 20.dp)
-            AnimatedVisibility(research, enter = expandHorizontally() + fadeIn(), exit = shrinkHorizontally() + fadeOut()) {
-                Txt("Research", 12.5.sp, C.accentHi, FontWeight.Medium, Modifier.padding(start = 6.dp))
+        if (files.isNotEmpty() || reading > 0) {
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 6.dp, end = 6.dp, top = 6.dp, bottom = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                files.forEachIndexed { i, f -> AttachmentChip(f) { files.removeAt(i) } }
+                if (reading > 0) {
+                    Box(Modifier.size(64.dp).background(C.elevated, RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) { Spinner(18.dp) }
+                }
             }
         }
-        BasicTextField(
-            value = text,
-            onValueChange = onText,
-            enabled = enabled,
-            textStyle = style(16.sp, C.text, lineHeight = 23.sp),
-            cursorBrush = SolidColor(C.accentHi),
-            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-            maxLines = 7,
-            modifier = Modifier.weight(1f).heightIn(min = 46.dp).onFocusChanged { focused = it.isFocused }
-                // A hair lower than centred: lowercase text reads centred against the round buttons.
-                .padding(start = 6.dp, end = 6.dp, top = 12.dp, bottom = 10.dp),
-            decorationBox = { inner ->
-                Box {
-                    if (text.isEmpty()) {
-                        Txt(if (enabled) "Message ${agent.name}…" else "Waiting for the connection…", 16.sp, C.faint, maxLines = 1, lineHeight = 23.sp)
-                    }
-                    inner()
+        Row(verticalAlignment = Alignment.Bottom) {
+            IconButton(Lucide.Plus, ::attach, C.muted, 22.dp, Modifier.size(46.dp))
+            // Deep research: an icon, which grows a label while it's on.
+            Row(
+                Modifier.height(46.dp).widthIn(min = 42.dp).clip(RoundedCornerShape(50))
+                    .background(if (research) C.accentSoft else androidx.compose.ui.graphics.Color.Transparent, RoundedCornerShape(50))
+                    .press { research = !research; haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
+                    .padding(horizontal = 11.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Lucide.Telescope, if (research) C.accentHi else C.muted, 20.dp)
+                AnimatedVisibility(research, enter = expandHorizontally() + fadeIn(), exit = shrinkHorizontally() + fadeOut()) {
+                    Txt("Research", 12.5.sp, C.accentHi, FontWeight.Medium, Modifier.padding(start = 6.dp))
                 }
-            },
-        )
-        val stop = running && text.isBlank()
-        val bg by animateColorAsState(if (stop) C.text else if (canSend) C.accent else C.hover, tween(180), label = "send")
-        val pop by animateFloatAsState(if (canSend || stop) 1f else 0.92f, spring(dampingRatio = 0.6f, stiffness = 600f), label = "pop")
-        Box(
-            Modifier.size(46.dp).graphicsLayer { scaleX = pop; scaleY = pop }.clip(CircleShape).background(bg, CircleShape)
-                .press(stop || canSend) { if (stop) vm.stop() else submit() },
-            contentAlignment = Alignment.Center,
-        ) {
-            AnimatedContent(stop, transitionSpec = { (scaleIn() + fadeIn()) togetherWith (scaleOut() + fadeOut()) }, label = "sendIcon") { s ->
-                if (s) Icon(Lucide.Square, C.bg, 15.dp) else Icon(Lucide.ArrowUp, if (canSend) C.onAccent else C.faint, 22.dp)
+            }
+            BasicTextField(
+                value = text,
+                onValueChange = onText,
+                enabled = enabled,
+                textStyle = style(16.sp, C.text, lineHeight = 23.sp),
+                cursorBrush = SolidColor(C.accentHi),
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                maxLines = 7,
+                modifier = Modifier.weight(1f).heightIn(min = 46.dp).onFocusChanged { focused = it.isFocused }
+                    // A hair lower than centred: lowercase text reads centred against the round buttons.
+                    .padding(start = 4.dp, end = 6.dp, top = 12.dp, bottom = 10.dp),
+                decorationBox = { inner ->
+                    Box {
+                        if (text.isEmpty()) {
+                            Txt(
+                                when {
+                                    !enabled -> "Waiting for the connection…"
+                                    files.isNotEmpty() -> "Add a message…"
+                                    else -> "Message ${agent.name}…"
+                                },
+                                16.sp, C.faint, maxLines = 1, lineHeight = 23.sp,
+                            )
+                        }
+                        inner()
+                    }
+                },
+            )
+            val stop = running && text.isBlank() && files.isEmpty() && !sending
+            val bg by animateColorAsState(if (stop) C.text else if (canSend || sending) C.accent else C.hover, tween(180), label = "send")
+            val pop by animateFloatAsState(if (canSend || stop || sending) 1f else 0.92f, spring(dampingRatio = 0.6f, stiffness = 600f), label = "pop")
+            Box(
+                Modifier.size(46.dp).graphicsLayer { scaleX = pop; scaleY = pop }.clip(CircleShape).background(bg, CircleShape)
+                    .press(stop || canSend) { if (stop) vm.stop() else submit() },
+                contentAlignment = Alignment.Center,
+            ) {
+                AnimatedContent(if (sending) 2 else if (stop) 1 else 0, transitionSpec = { (scaleIn() + fadeIn()) togetherWith (scaleOut() + fadeOut()) }, label = "sendIcon") { s ->
+                    when (s) {
+                        2 -> Spinner(18.dp, C.onAccent)
+                        1 -> Icon(Lucide.Square, C.bg, 15.dp)
+                        else -> Icon(Lucide.ArrowUp, if (canSend) C.onAccent else C.faint, 22.dp)
+                    }
+                }
             }
         }
     }
+}
+
+/** A picked file in the message box: a thumbnail for a photo, a chip for anything else. */
+@Composable
+private fun AttachmentChip(file: Upload, onRemove: () -> Unit) {
+    val thumb = remember(file) { file.thumb?.asImageBitmap() }
+    Box {
+        if (thumb != null) {
+            Image(thumb, file.name, Modifier.size(64.dp).clip(RoundedCornerShape(16.dp)), contentScale = ContentScale.Crop)
+        } else {
+            Row(
+                Modifier.height(64.dp).widthIn(max = 200.dp).background(C.elevated, RoundedCornerShape(16.dp))
+                    .border(1.dp, C.line, RoundedCornerShape(16.dp)).padding(start = 12.dp, end = 26.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Icon(Lucide.FileText, C.accentHi, 20.dp)
+                Column {
+                    Txt(file.name, 13.sp, C.text, maxLines = 1)
+                    Txt(sizeLabel(file.bytes.size), 11.5.sp, C.faint)
+                }
+            }
+        }
+        Box(
+            Modifier.align(Alignment.TopEnd).offset(4.dp, (-4).dp).size(24.dp).clip(CircleShape)
+                .background(C.bg.copy(alpha = 0.85f), CircleShape).border(1.dp, C.lineStrong, CircleShape).press(onClick = onRemove),
+            contentAlignment = Alignment.Center,
+        ) { Icon(Lucide.X, C.text, 12.dp) }
+    }
+}
+
+private fun sizeLabel(bytes: Int) = when {
+    bytes >= 1024 * 1024 -> "%.1f MB".format(bytes / 1024f / 1024f)
+    bytes >= 1024 -> "${bytes / 1024} KB"
+    else -> "$bytes B"
 }
