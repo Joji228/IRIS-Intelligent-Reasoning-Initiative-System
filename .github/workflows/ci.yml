@@ -58,7 +58,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo install cargo-audit --locked
-      - run: cargo audit --ignore RUSTSEC-2026-0187
+      # RUSTSEC-2026-0387 (crypto-bigint timing, reached through the Link key
+      # exchange) has no fix for the p256 version in use yet; revisit when it does.
+      - run: cargo audit --ignore RUSTSEC-2026-0187 --ignore RUSTSEC-2026-0387
       - uses: actions/setup-node@v4
         with:
           node-version: 22
