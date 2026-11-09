@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { Archive, ArrowDown, ChevronLeft, CornerDownRight, Ellipsis, ListOrdered, LoaderCircle, Paperclip, Pencil, X } from '@lucide/svelte';
+  import { Archive, ArrowDown, ChevronLeft, CornerDownRight, Ellipsis, ListOrdered, LoaderCircle, Paperclip, Pencil, Phone, X } from '@lucide/svelte';
+  import { call } from '../call/call.svelte';
   import { tip } from '../tooltip';
   import { dayLabel, newDay } from '../time';
   import AutoPicker from './AutoPicker.svelte';
@@ -151,6 +152,19 @@
         <div class="px-1 max-sm:hidden"><ContextRing used={contextUsed} agentName={agent.name} model={agent.provider && agent.model ? agent.model : undefined} below /></div>
       </div>
       <div class="max-md:hidden"><CreditBadge /></div>
+      <!-- Call: a soft violet disc, green with a beating dot while on a call with this agent -->
+      <button
+        class="relative grid size-9 shrink-0 place-items-center rounded-full border transition {call.agent?.id === agent.id
+          ? 'border-success/50 bg-success/15 text-success'
+          : 'border-accent/35 bg-accent-soft text-accent-hi hover:bg-accent/25'}"
+        onclick={() => app.startCall(agent)}
+        disabled={app.conn !== 'online'}
+        use:tip={call.agent?.id === agent.id ? 'Back to the call' : `Call `}
+        aria-label={`Call `}
+      >
+        <Phone size={16} />
+        {#if call.agent?.id === agent.id}<span class="absolute top-1 right-1 size-2 animate-pulse rounded-full bg-success"></span>{/if}
+      </button>
       <button
         class="rounded-lg p-2 text-faint transition hover:bg-hover hover:text-text max-md:hidden"
         onclick={() => (app.modal = { kind: 'agent', agentId: agent.id })}

@@ -14,6 +14,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -323,21 +325,36 @@ internal fun CallBackdrop(tint: Color, phase: CallPhase, muted: Boolean, waiting
  */
 @Composable
 private fun CallOrb(size: androidx.compose.ui.unit.Dp, tint: Color, phase: CallPhase, muted: Boolean, orb: @Composable (androidx.compose.ui.unit.Dp) -> Unit) {
+    // Three looks, each with its own steady pulse: calm (slow breathing), speaking (quicker) and you
+    // talking (green, quickest). They all run all the time and only cross-fade, so a change of
+    // phase never makes a ring jump mid-pulse.
     val pulse = rememberInfiniteTransition("call-pulse")
-    // Slow breathing while listening; quicker, bigger pulses when someone is speaking.
-    val (millis, amount) = when {
-        muted -> 3200 to 0.02f
-        phase == CallPhase.YouSpeaking -> 650 to 0.10f
-        phase == CallPhase.Speaking -> 850 to 0.08f
-        phase == CallPhase.Thinking -> 1600 to 0.03f
-        else -> 2600 to 0.04f
-    }
-    val t by pulse.animateFloat(0f, 1f, infiniteRepeatable(tween(millis, easing = FastOutSlowInEasing), RepeatMode.Reverse), "t")
-    val ring = if (phase == CallPhase.YouSpeaking && !muted) C.success else tint
+    val tCalm by pulse.animateFloat(0f, 1f, infiniteRepeatable(tween(2600, easing = FastOutSlowInEasing), RepeatMode.Reverse), "calm")
+    val tSpeak by pulse.animateFloat(0f, 1f, infiniteRepeatable(tween(850, easing = FastOutSlowInEasing), RepeatMode.Reverse), "speak")
+    val tYou by pulse.animateFloat(0f, 1f, infiniteRepeatable(tween(650, easing = FastOutSlowInEasing), RepeatMode.Reverse), "you")
+    val fade = tween<Float>(600)
+    val calm by animateFloatAsState(
+        when {
+            phase == CallPhase.Speaking || phase == CallPhase.YouSpeaking -> if (muted) 0.45f else 0f
+            muted -> 0.45f
+            else -> 1f
+        },
+        fade, label = "calm-a",
+    )
+    val speak by animateFloatAsState(if (phase == CallPhase.Speaking && !muted) 1f else 0f, fade, label = "speak-a")
+    val you by animateFloatAsState(if (phase == CallPhase.YouSpeaking && !muted) 1f else 0f, fade, label = "you-a")
+
     // Outer ring 0.80 of the space (x1.22 at its biggest = 0.98), inner ring 0.68, the orb 0.57.
+    @Composable
+    fun Rings(color: Color, t: Float, amount: Float, a: Float) {
+        if (a < 0.01f) return
+        Box(Modifier.size(size * 0.80f).scale(1f + amount * 2.2f * t).alpha((0.07f + 0.10f * t) * a).background(color, CircleShape))
+        Box(Modifier.size(size * 0.68f).scale(1f + amount * t).alpha(0.16f * a).background(color, CircleShape))
+    }
     Box(Modifier.size(size), contentAlignment = Alignment.Center) {
-        Box(Modifier.size(size * 0.80f).scale(1f + amount * 2.2f * t).alpha(0.07f + 0.10f * t).background(ring, CircleShape))
-        Box(Modifier.size(size * 0.68f).scale(1f + amount * t).alpha(if (muted) 0.07f else 0.16f).background(ring, CircleShape))
+        Rings(tint, tCalm, 0.04f, calm)
+        Rings(tint, tSpeak, 0.08f, speak)
+        Rings(C.success, tYou, 0.10f, you)
         orb(size * 0.57f)
     }
 }
@@ -345,7 +362,7 @@ private fun CallOrb(size: androidx.compose.ui.unit.Dp, tint: Color, phase: CallP
 /** A glass pill saying what the call is doing, with a little live indicator. */
 @Composable
 private fun StatusChip(phase: CallPhase, muted: Boolean, waiting: Boolean, trouble: String?, thinkingText: String, name: String) {
-    val color = when {
+    val target = when {
         trouble != null -> C.danger
         waiting -> C.warn
         muted -> C.faint
@@ -353,9 +370,11 @@ private fun StatusChip(phase: CallPhase, muted: Boolean, waiting: Boolean, troub
         phase == CallPhase.Speaking -> C.accentHi
         else -> C.muted
     }
+    // The chip's color glides to the new phase instead of switching.
+    val color by androidx.compose.animation.animateColorAsState(target, tween(400), label = "chip")
     Row(
         Modifier.background(Color.White.copy(alpha = 0.07f), RoundedCornerShape(50))
-            .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(50))
+            .border(1.dp, if (target == C.muted || target == C.faint) Color.White.copy(alpha = 0.10f) else color.copy(alpha = 0.32f), RoundedCornerShape(50))
             .padding(horizontal = 16.dp, vertical = 9.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -491,25 +510,56 @@ private fun RoundButton(
     iconRotation: Float = 0f,
     onClick: () -> Unit,
 ) {
+    // A springy press (it squeezes and bounces back), the accent fill fading in and out when it's
+    // switched on, the icon cross-fading when it changes, and a ring that bursts out on each tap.
+    val source = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val squeeze by animateFloatAsState(
+        if (pressed && enabled) 0.88f else 1f,
+        androidx.compose.animation.core.spring(dampingRatio = 0.42f, stiffness = 520f), label = "squeeze",
+    )
+    val fill by animateFloatAsState(if (on) 1f else 0f, tween(300), label = "fill")
+    val dim by animateFloatAsState(if (enabled) 1f else 0.38f, tween(250), label = "dim")
+    val burst = remember { androidx.compose.animation.core.Animatable(1f) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val tint by androidx.compose.animation.animateColorAsState(if (danger || on) Color.White else C.text, tween(300), label = "tint")
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Box(
-            Modifier.size(70.dp)
-                .alpha(if (enabled) 1f else 0.38f)
-                .background(
-                    when {
-                        danger -> Brush.linearGradient(listOf(Color(0xFFFB7185), Color(0xFFEF4444)))
-                        on -> Brush.linearGradient(listOf(C.accentHi, C.accent))
-                        else -> Brush.linearGradient(listOf(Color.White.copy(alpha = 0.12f), Color.White.copy(alpha = 0.06f)))
+        Box(Modifier.size(70.dp), contentAlignment = Alignment.Center) {
+            // The burst ring.
+            Box(
+                Modifier.size(70.dp).scale(1f + 0.45f * burst.value).alpha(0.55f * (1f - burst.value))
+                    .border(2.dp, if (danger) C.danger else if (on) C.accentHi else C.text, CircleShape),
+            )
+            Box(
+                Modifier.size(70.dp).scale(squeeze).alpha(dim)
+                    .background(
+                        if (danger) Brush.linearGradient(listOf(Color(0xFFFB7185), Color(0xFFEF4444)))
+                        else Brush.linearGradient(listOf(Color.White.copy(alpha = 0.12f), Color.White.copy(alpha = 0.06f))),
+                        CircleShape,
+                    )
+                    .background(Brush.linearGradient(listOf(C.accentHi.copy(alpha = fill), C.accent.copy(alpha = fill))), CircleShape)
+                    .border(1.dp, if (danger) Color.Transparent else Color.White.copy(alpha = 0.12f * (1f - fill)), CircleShape)
+                    .clickable(interactionSource = source, indication = null, enabled = enabled, role = androidx.compose.ui.semantics.Role.Button) {
+                        scope.launch {
+                            burst.snapTo(0f)
+                            burst.animateTo(1f, tween(450))
+                        }
+                        onClick()
                     },
-                    CircleShape,
-                )
-                .border(1.dp, if (danger || on) Color.Transparent else Color.White.copy(alpha = 0.12f), CircleShape)
-                .press(enabled, onClick = onClick),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(icon, if (danger || on) Color.White else C.text, 28.dp, Modifier.rotate(iconRotation))
+                contentAlignment = Alignment.Center,
+            ) {
+                AnimatedContent(
+                    targetState = icon,
+                    transitionSpec = {
+                        (fadeIn(tween(200)) + androidx.compose.animation.scaleIn(tween(260), initialScale = 0.6f)) togetherWith fadeOut(tween(120))
+                    },
+                    label = "icon",
+                ) { i -> Icon(i, tint, 28.dp, Modifier.rotate(iconRotation)) }
+            }
         }
-        Txt(label, 12.5.sp, if (danger) C.danger else C.muted, FontWeight.Medium)
+        AnimatedContent(targetState = label, transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(120)) }, label = "label") { l ->
+            Txt(l, 12.5.sp, if (danger) C.danger else C.muted, FontWeight.Medium)
+        }
     }
 }
 

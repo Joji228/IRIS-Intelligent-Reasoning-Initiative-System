@@ -276,6 +276,8 @@ export interface VoiceStatus {
   available: boolean;
   provider: string | null;
   model: string | null;
+  /** The free daily allowance of spoken turns as Groq last reported it; absent until the first turn. */
+  limits?: { limit: number; remaining: number; resets_at: number } | null;
 }
 
 /** Something an agent does on a schedule. */

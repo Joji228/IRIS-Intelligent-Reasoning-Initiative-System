@@ -20,6 +20,7 @@ import {
 } from '@lucide/svelte';
 import { ApiError, IrisApi, type Connection } from './api';
 import { voice } from './voice.svelte';
+import { call } from './call/call.svelte';
 import { inDesktopApp, inWebLink, resolveConnection, saveConnection } from './connection';
 import { forgetCredentials, LinkConnection, loadCredentials, type LinkCredentials, type LinkState } from './link';
 import {
@@ -71,7 +72,7 @@ export interface MenuItem {
 
 export type AutoMode = 'off' | 'careful' | 'full';
 
-export type SettingsTab = 'models' | 'providers' | 'routines' | 'skills' | 'connections' | 'accounts' | 'responses' | 'limits' | 'search' | 'activity' | 'devices' | 'remote' | 'appearance' | 'about';
+export type SettingsTab = 'models' | 'providers' | 'voice' | 'routines' | 'skills' | 'connections' | 'accounts' | 'responses' | 'limits' | 'search' | 'activity' | 'devices' | 'remote' | 'appearance' | 'about';
 
 export type ConnState = 'starting' | 'online' | 'reconnecting' | 'offline' | 'setup' | 'signin';
 
@@ -956,6 +957,39 @@ class IrisApp {
     }
   }
 
+  /**
+   * Starts a voice call with an agent (or returns to the one going). If the server can't turn
+   * speech into text yet, Settings → Voice & calls opens instead.
+   */
+  async startCall(agent: Agent) {
+    if (call.active) {
+      if (call.agent?.id === agent.id) call.open = true;
+      else this.toast(`You're already on a call with ${call.agent?.name}`);
+      return;
+    }
+    const api = this.api;
+    if (!api) return;
+    try {
+      const status = await api.voice();
+      if (!status.available) {
+        this.toast('Add a Groq key in Settings → Providers to make calls');
+        this.modal = { kind: 'settings', tab: 'voice' };
+        return;
+      }
+      await call.start(agent, {
+        api: () => this.api,
+        phrase: (activity) => phrases(orbState({ activity, working: true }), activity)[0],
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      // The browser's own refusal is "NotAllowedError"; say what to do about it.
+      this.toast(/NotAllowed|Permission/i.test(msg) || (e as { name?: string }).name === 'NotAllowedError'
+        ? 'The microphone is blocked. Allow it for I.R.I.S. in the browser or Windows settings.'
+        : msg);
+      call.hangUp();
+    }
+  }
+
   async stop() {
     const v = this.view;
     if (this.api && v.kind === 'agent' && v.threadId) {
@@ -1034,6 +1068,8 @@ class IrisApp {
   // ---- live events -----------------------------------------------------------------
 
   private onEvent(e: IrisEvent) {
+    // A voice call hears the same live events (its replies, steps and approvals).
+    if (call.active) call.onEvent(e);
     switch (e.type) {
       case 'agent_updated': {
         const isNew = !this.agents.some((a) => a.id === e.agent.id);

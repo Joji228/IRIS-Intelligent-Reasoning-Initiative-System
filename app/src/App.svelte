@@ -17,6 +17,9 @@
   import CreditBadge from './lib/components/CreditBadge.svelte';
   import Toasts from './lib/components/Toasts.svelte';
   import UpdateBanner from './lib/components/UpdateBanner.svelte';
+  import CallView from './lib/components/CallView.svelte';
+  import CallBar from './lib/components/CallBar.svelte';
+  import { call } from './lib/call/call.svelte';
 
   onMount(() => {
     void app.start();
@@ -64,6 +67,8 @@
     </div>
   {/if}
   <UpdateBanner />
+  <!-- A call going on behind the app: a strip at the top, click to go back -->
+  {#if call.active && !call.open}<CallBar />{/if}
   <div class="flex min-h-0 flex-1">
     <!-- Phones: the rail on the home screen; chats take the whole width -->
     <div class="h-full {app.view.kind === 'home' ? 'flex' : 'hidden md:flex'}">
@@ -97,6 +102,8 @@
 {:else if app.modal?.kind === 'problems'}
   <ProblemsPanel />
 {/if}
+
+{#if call.active && call.open}<CallView />{/if}
 
 <Toasts />
 <ContextMenu />

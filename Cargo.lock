@@ -2248,7 +2248,7 @@ checksum = "791930b43c0d5973160d90a8f3894509f2b273430f5c5c73b668636d0287c5c0"
 
 [[package]]
 name = "iris-core"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "rusqlite",
  "serde",
@@ -2258,7 +2258,7 @@ dependencies = [
 
 [[package]]
 name = "iris-desktop"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "dirs 6.0.0",
  "hex",
@@ -2275,7 +2275,7 @@ dependencies = [
 
 [[package]]
 name = "iris-engine"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -2315,7 +2315,7 @@ dependencies = [
 
 [[package]]
 name = "iris-providers"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "futures-util",
  "reqwest 0.12.28",

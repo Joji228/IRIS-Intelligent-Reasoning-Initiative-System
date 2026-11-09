@@ -1,6 +1,7 @@
 <script lang="ts">
   import {
     Activity,
+    Mic,
     BookOpen,
     Briefcase,
     CalendarClock,
@@ -39,6 +40,7 @@
   import { tip } from '../tooltip';
   import { REASONING_LEVELS, type Device, type LinkStatus, type Pairing, type Limits, type Provider, type ResponseStyle, type Routine, type SearchStatus, type Skill, type McpServer, type VaultAccount, type ToolLogEntry } from '../types';
   import AgentAvatar from './AgentAvatar.svelte';
+  import VoiceSettings from './VoiceSettings.svelte';
   import Modal from './Modal.svelte';
   import Select from './Select.svelte';
   import UsageBar from './UsageBar.svelte';
@@ -50,6 +52,7 @@
     { id: 'models', label: 'Models', icon: Cpu },
     { id: 'providers', label: 'Providers', icon: Server },
     { id: 'responses', label: 'Personality & memory', icon: MessageSquareText },
+    { id: 'voice', label: 'Voice & calls', icon: Mic },
     { id: 'routines', label: 'Routines', icon: CalendarClock },
     { id: 'skills', label: 'Skills', icon: BookOpen },
     { id: 'connections', label: 'Connections', icon: Plug },
@@ -1775,6 +1778,8 @@
             </button>
           </div>
         </div>
+      {:else if tab === 'voice'}
+        <VoiceSettings />
       {:else if tab === 'appearance'}
         <h3 class="mb-4 text-[15px] font-semibold">Theme</h3>
         <div class="grid max-w-md grid-cols-2 gap-3">
