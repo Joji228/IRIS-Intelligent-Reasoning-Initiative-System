@@ -1400,7 +1400,7 @@
                   >
                 {/each}
               </div>
-              <p class="hint">Also: <code>weekends 10:00</code>, <code>every 1d</code>, <code>once 2026-11-05 18:00</code>. Local time; at most every 5 minutes.</p>
+              <p class="hint">Also: <code>weekends 10:00</code>, <code>every 1d</code>, <code>once 2026-11-05 18:00</code> (removed after it runs). Local time; at most every 5 minutes.</p>
             </div>
             <div>
               <span class="label">Type</span>

@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -118,16 +119,17 @@ private fun RoutinesPage(vm: IrisViewModel, back: () -> Unit) {
                         Txt("Last: ${when_(r.lastRun)}", 11.5.sp, C.faint)
                     }
                     if (r.lastResult.isNotEmpty()) Txt(r.lastResult, 12.sp, C.faint, maxLines = 2)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Run now and Edit share the width; Delete is a red trash button so the row fits a phone.
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button("Run now", {
                             scope.launch { vm.attempt { runRoutine(r.id) }?.let { vm.showToast("“${r.name}” started") } }
-                        }, icon = Lucide.Play, primary = false)
-                        Button("Edit", { editing = r }, icon = Lucide.Pencil, primary = false)
-                        Button("Delete", {
+                        }, Modifier.weight(1f), icon = Lucide.Play, primary = false, padding = PaddingValues(horizontal = 12.dp, vertical = 12.dp))
+                        Button("Edit", { editing = r }, Modifier.weight(1f), icon = Lucide.Pencil, primary = false, padding = PaddingValues(horizontal = 12.dp, vertical = 12.dp))
+                        DangerIconButton(Lucide.Trash, "Delete “${r.name}”") {
                             overlays.menu("Delete “${r.name}”?", listOf(MenuItem("Delete routine", Lucide.Trash, danger = true) {
                                 scope.launch { vm.attempt { deleteRoutine(r.id) }; load() }
                             }))
-                        }, icon = Lucide.Trash, primary = false)
+                        }
                     }
                 }
             }
@@ -158,7 +160,7 @@ private fun RoutineForm(vm: IrisViewModel, r: Routine, onDone: () -> Unit) {
                     Label("When")
                     Field(schedule, { schedule = it }, mono = true)
                     Chips(SCHEDULES.map { it to it }, schedule, mono = true) { schedule = it }
-                    Hint("Also: weekends 10:00, every 1d, once 2026-11-05 18:00. Local time; at most every 5 minutes.")
+                    Hint("Also: weekends 10:00, every 1d, once 2026-11-05 18:00 (removed after it runs). Local time; at most every 5 minutes.")
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Label("Type")

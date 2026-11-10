@@ -478,7 +478,7 @@ pub fn specs_for(enabled: &[String]) -> Vec<ToolSpec> {
              checks (site up? disk space?). kind \"heartbeat\": `task` is a checklist the agent goes through at \
              each run; when nothing needs attention the check is silent (removed from the chat), otherwise it \
              tells the user. Good for \"keep an eye on …\" (every 30m or more). schedule: \"every 30m\", \"every 2h\", \"daily 08:00\", \
-             \"weekdays 09:00\", \"weekends 10:00\", \"weekly mon 09:00\" or \"once 2026-11-02 08:00\" (local time).",
+             \"weekdays 09:00\", \"weekends 10:00\", \"weekly mon 09:00\" or \"once 2026-11-02 08:00\" (local time). A \"once\" routine removes itself after it runs (a failed command stays, switched off, so the user sees it).",
             json!({
                 "type": "object",
                 "properties": {

@@ -104,8 +104,39 @@ pub fn create(st: &AppState, agent_id: &str, name: &str, schedule: &str, kind: &
     Ok(r)
 }
 
+/// Whether a schedule runs only once ("once 2026-11-02 08:00").
+fn is_once(schedule: &str) -> bool {
+    schedule.trim().to_lowercase().starts_with("once ")
+}
+
+/// A one-off that is done: it ran, its time has passed, and it didn't end in a failed
+/// command (that one stays, switched off, so the user sees it and can run it again).
+fn finished_one_off(r: &Routine, now: chrono::DateTime<Local>) -> bool {
+    is_once(&r.schedule)
+        && !r.enabled
+        && r.last_run.is_some()
+        && !r.last_result.starts_with("failed")
+        && matches!(next_run(&r.schedule, now), Ok(None))
+}
+
+/// Removes one-offs that already ran (left over from versions that only switched them off).
+fn sweep_finished(st: &AppState) {
+    let now = Local::now();
+    let mut removed = 0;
+    for r in st.store.list_routines().unwrap_or_default() {
+        if finished_one_off(&r, now) && st.store.delete_routine(&r.id).unwrap_or(false) {
+            info!("removed finished one-off routine “{}”", r.name);
+            removed += 1;
+        }
+    }
+    if removed > 0 {
+        st.emit(Event::RoutinesChanged);
+    }
+}
+
 /// The scheduler: runs whatever is due, forever.
 pub async fn run_forever(st: AppState) {
+    sweep_finished(&st);
     loop {
         tokio::time::sleep(Duration::from_secs(20)).await;
         let now = iris_core::now_ms();
@@ -181,9 +212,15 @@ pub async fn fire(st: &AppState, mut r: Routine) {
         }
     };
     if r.next_run.is_none() {
-        r.enabled = false; // a one-off that has run
+        r.enabled = false; // a one-off that has run (or a schedule that no longer reads)
     }
-    let _ = st.store.save_routine(&r);
+    // A one-off is done once it has run: remove it, unless its command failed.
+    if finished_one_off(&r, Local::now()) {
+        let _ = st.store.delete_routine(&r.id);
+        info!("one-off routine “{}” ran; removed", r.name);
+    } else {
+        let _ = st.store.save_routine(&r);
+    }
     st.emit(Event::RoutinesChanged);
 
     if let Some(content) = wake {
@@ -365,6 +402,36 @@ mod tests {
         assert_eq!(at("once 2026-11-01 08:00"), None, "past one-offs never fire");
         assert!(next_run("every 1m", now).is_err());
         assert!(next_run("sometimes", now).is_err());
+    }
+
+    #[test]
+    fn one_offs_are_finished_once_they_ran() {
+        let now = Local.with_ymd_and_hms(2026, 11, 10, 12, 0, 0).unwrap();
+        let routine = |schedule: &str, enabled: bool, ran: bool, result: &str| Routine {
+            id: "r".into(),
+            agent_id: "a".into(),
+            name: "n".into(),
+            schedule: schedule.into(),
+            kind: "prompt".into(),
+            body: "b".into(),
+            notify: "failure".into(),
+            enabled,
+            next_run: None,
+            last_run: ran.then_some(1),
+            last_result: result.into(),
+            created_at: 0,
+        };
+        // Ran, time passed: done, removed.
+        assert!(finished_one_off(&routine("once 2026-11-05 11:30", false, true, "sent to the agent"), now));
+        assert!(finished_one_off(&routine("once 2026-11-05 11:30", false, true, "ok"), now));
+        // A failed command stays so the user sees it.
+        assert!(!finished_one_off(&routine("once 2026-11-05 11:30", false, true, "failed · exit 1"), now));
+        // Not yet run, still on, or still in the future: kept.
+        assert!(!finished_one_off(&routine("once 2026-11-05 11:30", false, false, ""), now));
+        assert!(!finished_one_off(&routine("once 2026-11-05 11:30", true, true, "ok"), now));
+        assert!(!finished_one_off(&routine("once 2026-11-12 09:00", false, true, "ok"), now), "Run now on a future one-off keeps it");
+        // Repeating routines are never removed.
+        assert!(!finished_one_off(&routine("daily 08:00", false, true, "ok"), now));
     }
 
     #[test]

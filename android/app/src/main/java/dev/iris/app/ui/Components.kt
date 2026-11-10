@@ -41,6 +41,8 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -145,8 +147,21 @@ fun Button(
     ) {
         val fg = if (primary) C.onAccent else C.text
         if (busy) Spinner(16.dp, fg) else if (icon != null) Icon(icon, fg, 17.dp)
-        Txt(text, 14.5.sp, fg, FontWeight.Medium)
+        // One line: a squeezed button must never break its label into letters.
+        Txt(text, 14.5.sp, fg, FontWeight.Medium, maxLines = 1)
     }
+}
+
+/** A square outlined button with a red icon, for deleting (same height as [Button]). */
+@Composable
+fun DangerIconButton(icon: ImageVector, label: String, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(16.dp)
+    Box(
+        Modifier.size(46.dp).border(1.dp, C.danger.copy(alpha = 0.35f), shape).clip(shape)
+            .semantics { contentDescription = label }
+            .press(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { Icon(icon, C.danger, 18.dp) }
 }
 
 @Composable
