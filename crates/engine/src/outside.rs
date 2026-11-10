@@ -3,14 +3,14 @@
 //!
 //! None of this is a wall (a model can always be talked into things), so it works in layers:
 //! the model is told what is data; results from outside carry a label; the "outside content
-//! was read" warning follows work handed between agents; Full auto stops skipping the
-//! command review once outside content was read; and an address or form text that carries
-//! the user's own private text out asks first.
+//! was read" warning follows work handed between agents; the auto-mode command review is
+//! told when outside content was read, so it watches for steered commands; and an address
+//! or form text that carries the user's own private text out asks first.
 
 use iris_core::Message;
 use iris_core::ToolStatus;
 
-use crate::{api::AutoMode, tools};
+use crate::tools;
 
 /// First line of every result that came from a web page or a connected service.
 pub const OUTSIDE_LABEL: &str =
@@ -55,17 +55,28 @@ pub fn reply_read_outside(m: &Message) -> bool {
     m.rounds.iter().flat_map(|r| &r.tools).any(|t| t.status == ToolStatus::Done && is_outside_tool(&t.name))
 }
 
-/// Full auto skips the command review; once outside content was read it doesn't, for the
-/// rest of the reply: commands then get the stricter review Careful mode gives.
-pub fn effective_mode(mode: AutoMode, read_outside: bool) -> AutoMode {
-    if mode == AutoMode::Full && read_outside { AutoMode::Careful } else { mode }
-}
 
 /// Tools whose results hold the user's own information (what a planted instruction would
 /// want to carry out).
 pub fn is_private_tool(name: &str) -> bool {
     matches!(name, "read_file" | "list_files" | "search_chats" | "get_settings" | "list_accounts" | "run_command" | "check_task")
         || name.starts_with(tools::MCP_PREFIX)
+}
+
+/// Whether this call's result counts as the user's own text for the leak check. A command
+/// that fetched web pages (curl, Invoke-WebRequest…) returns the site's text, not the user's:
+/// counting it would make following that site's own links look like a leak.
+pub fn is_private_result(name: &str, arguments: &str) -> bool {
+    if name == "run_command" {
+        let command = serde_json::from_str::<serde_json::Value>(arguments)
+            .ok()
+            .and_then(|v| v["command"].as_str().map(str::to_ascii_lowercase))
+            .unwrap_or_default();
+        if command.contains("http://") || command.contains("https://") {
+            return false;
+        }
+    }
+    is_private_tool(name)
 }
 
 /// How long a stretch of copied text counts as "the same text".
@@ -155,11 +166,10 @@ mod tests {
     }
 
     #[test]
-    fn full_auto_loses_its_shortcut_after_outside_content() {
-        assert_eq!(effective_mode(AutoMode::Full, true), AutoMode::Careful);
-        assert_eq!(effective_mode(AutoMode::Full, false), AutoMode::Full);
-        assert_eq!(effective_mode(AutoMode::Careful, true), AutoMode::Careful);
-        assert_eq!(effective_mode(AutoMode::Off, true), AutoMode::Off);
+    fn web_fetching_commands_are_not_private() {
+        assert!(!is_private_result("run_command", r#"{"command":"curl.exe -s https://example.com/"}"#));
+        assert!(is_private_result("run_command", r#"{"command":"Get-Content notes.txt"}"#));
+        assert!(is_private_result("read_file", r#"{"path":"https://x"}"#));
     }
 
     #[test]

@@ -331,7 +331,7 @@ pub async fn tool(st: &AppState, me: &iris_core::Agent, call: &ToolCall) -> Tool
 }
 
 /// Creating a scheduled command (it would run unattended) asks the user,
-/// unless Full auto and the command passes the hard rules.
+/// unless Full auto and the command isn't catastrophic.
 pub fn needs_approval(call: &ToolCall, mode: crate::api::AutoMode) -> bool {
     if call.name != "create_routine" {
         return false;
@@ -340,7 +340,7 @@ pub fn needs_approval(call: &ToolCall, mode: crate::api::AutoMode) -> bool {
     if args["kind"].as_str() != Some("command") {
         return false;
     }
-    mode != crate::api::AutoMode::Full || crate::autoapprove::hard_rule(args["task"].as_str().unwrap_or_default()).is_some()
+    mode != crate::api::AutoMode::Full || crate::autoapprove::catastrophic(args["task"].as_str().unwrap_or_default()).is_some()
 }
 
 fn when(ms: Option<i64>) -> String {

@@ -216,6 +216,9 @@ pub const WEB_CONTENT_FUNCTIONS: &[&str] = &[
 /// every later reply, so text from a web page must not get in unnoticed.
 pub const LASTING_FUNCTIONS: &[&str] =
     &["change_setting", "switch_model", "create_routine", "delete_routine", "request_tools", "save_skill", "memory"];
+/// Of those, the ones Full auto lets through even after web content was read
+/// (the user asked for few interruptions; settings, routines and skills still ask).
+pub const LASTING_OK_IN_FULL: &[&str] = &["switch_model", "request_tools", "memory"];
 
 /// Which toolset a callable function belongs to.
 pub fn toolset_of(function: &str) -> Option<&'static str> {

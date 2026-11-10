@@ -183,7 +183,7 @@ private fun ModelsPage(vm: IrisViewModel, back: () -> Unit) {
 val AUTO_MODES = listOf(
     Triple("off", "Off", "Every command asks you first."),
     Triple("careful", "Careful", "An AI check approves safe commands."),
-    Triple("full", "Full auto", "Only dangerous commands ask you."),
+    Triple("full", "Full auto", "Only catastrophic commands ask you."),
 )
 
 // ---- Personality & memory --------------------------------------------------------------

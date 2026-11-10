@@ -177,12 +177,17 @@ fun NotificationsPage(vm: IrisViewModel, back: () -> Unit) {
                 Card {
                     CardTitle(
                         "Let it run in the background",
-                        "Samsung puts apps to sleep to save battery, which would cut the connection. Allow I.R.I.S. to run unrestricted so notifications arrive on time.",
+                        "Samsung puts apps to sleep to save battery, which would cut the connection. In the screen that opens, go to Battery and choose Unrestricted so notifications arrive on time.",
                     )
-                    Button("Allow background use", {
+                    // Opens the app's own settings page instead of asking directly
+                    // (ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS): that needs the
+                    // REQUEST_IGNORE_BATTERY_OPTIMIZATIONS permission, which Google restricts and
+                    // which makes Play Protect's checks more suspicious of a sideloaded app.
+                    Button("Open battery settings", {
                         runCatching {
                             context.startActivity(
-                                Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${context.packageName}")),
+                                Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                             )
                         }
                     }, icon = Lucide.Zap)

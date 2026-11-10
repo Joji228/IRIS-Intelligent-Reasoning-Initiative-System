@@ -128,6 +128,7 @@ pub async fn run(
         private: String::new(),
         research: false,
         voice: false,
+        commands: Vec::new(),
     };
     let result = reply.generate(&cancel).await;
     state.runs.lock().unwrap().remove(&thread_id);
@@ -281,6 +282,9 @@ struct Reply<'a> {
     research: bool,
     /// The user is on a voice call (see [`VOICE_PREFIX`]): the reply is read aloud.
     voice: bool,
+    /// Commands that ran in this reply (auto-approved or approved by the user), oldest
+    /// first: context for the auto-mode reviewer, and a rerun needs no new review.
+    commands: Vec<String>,
 }
 
 /// Toolsets that make an agent a specialist, in families of the same kind of
@@ -612,26 +616,29 @@ impl Reply<'_> {
         }
         // Auto mode: a safety check may approve a command instead of the user.
         let mut auto = None;
-        // After outside content was read, Full auto stops skipping the command review.
-        let mode = crate::outside::effective_mode(self.state.auto_mode_for(self.agent), self.read_web);
+        let mode = self.state.auto_mode_for(self.agent);
         if allowed && call.name == "run_command" && mode != crate::api::AutoMode::Off {
             self.state.set_activity(self.thread_id, "reviewing", &tools::describe(call));
             let command = serde_json::from_str::<serde_json::Value>(&call.arguments)
                 .ok()
                 .and_then(|v| v["command"].as_str().map(str::to_owned))
                 .unwrap_or_default();
-            let task = self.task();
-            let full = mode == crate::api::AutoMode::Full;
+            let (task, latest) = self.task_and_latest();
+            // The same command already ran in this reply (agents often rerun one): no new review.
+            let repeat = self.commands.contains(&command);
+            // Careful: a normal review. Full: a lenient one that only stops the catastrophic.
             let review = async {
-                // Full auto: only the hard rules stop a command; no model call.
-                if full {
-                    match crate::autoapprove::hard_rule(&command) {
-                        Some(why) => (crate::autoapprove::Verdict::Ask(format!("Needs you: {why}")), 0),
-                        None => (crate::autoapprove::Verdict::Allow("full auto".into()), 0),
-                    }
-                } else {
-                    crate::autoapprove::review(&conn.client, &conn.model, &ctx.workspace, &task, &command, self.read_web).await
+                if repeat {
+                    return (crate::autoapprove::Verdict::Allow("same command as earlier in this reply".into()), 0);
                 }
+                let rctx = crate::autoapprove::Context {
+                    workspace: &ctx.workspace,
+                    task: &task,
+                    latest: &latest,
+                    read_web: self.read_web,
+                    earlier: &self.commands,
+                };
+                crate::autoapprove::review(&conn.client, &conn.model, mode, &rctx, &command).await
             };
             let (verdict, tokens) = tokio::select! {
                 v = review => v,
@@ -655,7 +662,9 @@ impl Reply<'_> {
             self.set_step(round, idx, |s| s.auto_approved = Some(reason));
         } else if allowed
             && (tools::needs_approval(&call.name)
-                || (self.read_web && tools::LASTING_FUNCTIONS.contains(&call.name.as_str()))
+                || (self.read_web
+                    && tools::LASTING_FUNCTIONS.contains(&call.name.as_str())
+                    && !(mode == crate::api::AutoMode::Full && tools::LASTING_OK_IN_FULL.contains(&call.name.as_str())))
                 || (call.name.starts_with(tools::MCP_PREFIX) && self.state.mcp.needs_approval(&self.state.data_dir, &call.name))
                 || crate::develop::needs_approval(&call.name)
                 || crate::system::needs_approval(call, mode)
@@ -689,6 +698,13 @@ impl Reply<'_> {
             self.publish();
         }
 
+        if allowed && call.name == "run_command" {
+            if let Some(command) =
+                serde_json::from_str::<serde_json::Value>(&call.arguments).ok().and_then(|v| v["command"].as_str().map(str::to_owned))
+            {
+                self.commands.push(command);
+            }
+        }
         let outcome = if allowed && call.name == "ask_user" {
             tools::ask_user(call)
         } else if allowed && call.name == "request_tools" {
@@ -764,7 +780,7 @@ impl Reply<'_> {
         }
         let output = tools::truncate(&outcome.output, MAX_TOOL_OUTPUT_CHARS);
         // What the user's own tools returned, kept to spot it leaving in a web address (capped).
-        if outcome.ok && crate::outside::is_private_tool(&call.name) && self.private.len() < 400_000 {
+        if outcome.ok && crate::outside::is_private_result(&call.name, &call.arguments) && self.private.len() < 400_000 {
             self.private.push('\n');
             self.private.push_str(&output);
         }
@@ -840,15 +856,18 @@ impl Reply<'_> {
     }
 
     /// What this conversation is about: its first user message (for a
-    /// delegated task, the task itself).
-    fn task(&self) -> String {
-        self.state
+    /// delegated task, the task itself), and the latest one.
+    fn task_and_latest(&self) -> (String, String) {
+        let users: Vec<String> = self
+            .state
             .store
             .list_messages(self.thread_id)
-            .ok()
-            .and_then(|m| m.into_iter().find(|m| m.role == MessageRole::User))
-            .map(|m| m.content)
             .unwrap_or_default()
+            .into_iter()
+            .filter(|m| m.role == MessageRole::User)
+            .map(|m| m.content)
+            .collect();
+        (users.first().cloned().unwrap_or_default(), users.last().cloned().unwrap_or_default())
     }
 
     /// Pauses until the user approves or denies the step. `None` if the reply

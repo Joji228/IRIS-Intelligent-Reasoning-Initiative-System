@@ -19,11 +19,11 @@
 
   const modes: { id: AutoMode; label: string; hint: string; icon: typeof Zap }[] = [
     { id: 'off', label: 'Ask me', hint: 'Every command waits for your approval.', icon: ShieldOff },
-    { id: 'careful', label: 'Careful auto', hint: 'A quick AI check approves safe commands; anything unclear asks you.', icon: ShieldCheck },
+    { id: 'careful', label: 'Careful auto', hint: 'A quick AI check approves normal, safe steps of the task; anything that could do real damage asks you.', icon: ShieldCheck },
     {
       id: 'full',
       label: 'Full auto',
-      hint: 'Runs commands without an AI check. Only a fixed list of obviously dangerous patterns (wiping disks, registry, security, installs, sending data out, secrets, shutdown) still asks; a determined or tricked agent can get around it. Fastest, least safe.',
+      hint: 'Lets the agent work without interruptions. A lenient AI check only stops truly catastrophic things (wiping data, shutting down or locking out the server, turning off security, secrets leaving, spending money, attacks) and asks you about those. Fastest, least safe.',
       icon: Zap,
     },
   ];

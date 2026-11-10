@@ -7,9 +7,9 @@
 **Your own team of AI agents, running on your own PC.**<br>
 Chat with them from your desktop, any browser, or your Android phone.
 
-<a href="https://github.com/Joji228/IRIS-Intelligent-Reasoning-Initiative-System/releases/download/v0.2.5/IRIS-Setup-x64-v0.2.5.exe"><img src="https://img.shields.io/badge/Download%20for%20Windows-v0.2.5-8b5cf6?style=for-the-badge" alt="Download for Windows (.exe)" height="40"></a>
+<a href="https://github.com/Joji228/IRIS-Intelligent-Reasoning-Initiative-System/releases/download/v0.2.6/IRIS-Setup-x64-v0.2.6.exe"><img src="https://img.shields.io/badge/Download%20for%20Windows-v0.2.6-8b5cf6?style=for-the-badge" alt="Download for Windows (.exe)" height="40"></a>
 &nbsp;
-<a href="https://github.com/Joji228/IRIS-Intelligent-Reasoning-Initiative-System/releases/download/v0.2.5/IRIS-Android-v0.2.5.apk"><img src="https://img.shields.io/badge/Download%20for%20Android-v0.2.5-34d399?style=for-the-badge&logo=android&logoColor=white" alt="Download for Android (.apk)" height="40"></a>
+<a href="https://github.com/Joji228/IRIS-Intelligent-Reasoning-Initiative-System/releases/download/v0.2.6/IRIS-Android-v0.2.6.apk"><img src="https://img.shields.io/badge/Download%20for%20Android-v0.2.6-34d399?style=for-the-badge&logo=android&logoColor=white" alt="Download for Android (.apk)" height="40"></a>
 
 <sub>Windows 10/11 (64-bit) · Android 10+ · Free and open source ([MIT](LICENSE))</sub>
 
@@ -49,7 +49,7 @@ Chat with them from your desktop, any browser, or your Android phone.
 
 ## Install (5 minutes)
 
-1. **Download** [**IRIS-Setup-x64-v0.2.5.exe**](https://github.com/Joji228/IRIS-Intelligent-Reasoning-Initiative-System/releases/download/v0.2.5/IRIS-Setup-x64-v0.2.5.exe) and run it.<br>
+1. **Download** [**IRIS-Setup-x64-v0.2.6.exe**](https://github.com/Joji228/IRIS-Intelligent-Reasoning-Initiative-System/releases/download/v0.2.6/IRIS-Setup-x64-v0.2.6.exe) and run it.<br>
    <sub>Windows may warn because the installer isn't signed yet: **More info → Run anyway**.</sub>
 2. **Add a model.** Open **Settings → Providers** and paste an API key, for example from [DeepSeek](https://platform.deepseek.com/) (cheap and capable).
 3. **Say hi to Iris.** Ask her anything, or press **+** and describe the agent you want.
@@ -75,7 +75,7 @@ The phone app always connects through a relay, which keeps everything end-to-end
    ```
 4. In I.R.I.S., open **Settings → Remote access**, paste that address, and turn it on.
 5. **Pair a device:**
-   - **Android:** install [**IRIS-Android-v0.2.5.apk**](https://github.com/Joji228/IRIS-Intelligent-Reasoning-Initiative-System/releases/download/v0.2.5/IRIS-Android-v0.2.5.apk) (allow installs from your browser when asked) and scan the QR code shown in Settings. Allow notifications, and set battery use to *Unrestricted* so they arrive.
+   - **Android:** install [**IRIS-Android-v0.2.6.apk**](https://github.com/Joji228/IRIS-Intelligent-Reasoning-Initiative-System/releases/download/v0.2.6/IRIS-Android-v0.2.6.apk) (allow installs from your browser when asked) and scan the QR code shown in Settings. Allow notifications, and set battery use to *Unrestricted* so they arrive.
      <br><sub>Coming from 0.1.0? Uninstall that one first: since 0.2.0 the app is signed with a permanent key and Android won't update over an app signed with a different one. You pair the phone again; nothing on your PC is affected.</sub>
    - **Any browser:** open your relay address and scan the same QR code, or type the pairing code.
 
@@ -110,7 +110,7 @@ The check only asks GitHub for the latest release (GitHub sees your IP address, 
 - **Approvals:** commands, installs, restarts, payments and lasting changes ask first. Per agent, you can let some run on their own (*Careful* or *Full* auto).
 - **Encryption:** every message sent through the relay (I.R.I.S. Link) is encrypted end to end (ECDH P-256 + AES-256-GCM), and the relay only sees sealed data. Connecting directly over your home network (`http://<your PC>:7700`) is **not** encrypted: use it only on a network you trust, and use the relay for anything else.
 - **Keys and logins:** they stay on your PC and are never shown to agents. Saved logins are encrypted with Windows DPAPI.
-- **Web content:** it's treated as untrusted. Replies are sanitized and remote images never load. Agents are told that web pages, emails and other outside text are information, not orders, and what comes back from them is labelled. After reading the web or a connected service, agents need your OK for lasting changes, Full auto goes back to reviewing commands, and a web address or form that would carry your own text out asks first. This reduces prompt-injection risk; it can't remove it (see [SECURITY.md](SECURITY.md)).
+- **Web content:** it's treated as untrusted. Replies are sanitized and remote images never load. Agents are told that web pages, emails and other outside text are information, not orders, and what comes back from them is labelled. After reading the web or a connected service, agents need your OK for most lasting changes, the auto-mode command check watches for steered commands, and a web address or form that would carry your own text out asks first. This reduces prompt-injection risk; it can't remove it (see [SECURITY.md](SECURITY.md)).
 
 Found a security problem? Please report it privately: see [SECURITY.md](SECURITY.md).
 

@@ -854,7 +854,7 @@
             <div class="mt-4 border-t border-accent/20 pt-4">
               <div class="label">Auto mode for new agents</div>
               <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                {#each [{ id: 'off', title: 'Off', text: 'Every command asks you first.' }, { id: 'careful', title: 'Careful', text: 'An AI check approves safe commands.' }, { id: 'full', title: 'Full auto', text: 'Only dangerous commands ask you.' }] as const as m (m.id)}
+                {#each [{ id: 'off', title: 'Off', text: 'Every command asks you first.' }, { id: 'careful', title: 'Careful', text: 'An AI check approves safe commands.' }, { id: 'full', title: 'Full auto', text: 'Only catastrophic commands ask you.' }] as const as m (m.id)}
                   <button
                     class="rounded-xl border px-3 py-2.5 text-left transition {autoDefault === m.id
                       ? 'border-accent/70 bg-accent-soft'
