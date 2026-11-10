@@ -291,7 +291,7 @@ impl Hub {
 
     pub async fn call(&self, call: &ToolCall) -> ToolOutcome {
         let Some((live, server, tool)) = self.find(&call.name) else {
-            return ToolOutcome::err("Connection not available", "this connection isn't available right now (Settings → Connections)");
+            return ToolOutcome::err("Connection not available", "this connection isn't available right now (Settings → Connected services)");
         };
         let summary = format!("{server}: {}", tool.name);
         let args: Value = serde_json::from_str(if call.arguments.trim().is_empty() { "{}" } else { &call.arguments })
@@ -575,7 +575,7 @@ impl StdioConn {
 
     async fn request(&self, method: &str, params: Value) -> Result<Value, String> {
         if !self.alive.load(Ordering::Relaxed) {
-            return Err("the server program has stopped; reconnect it in Settings → Connections".into());
+            return Err("the server program has stopped; reconnect it in Settings → Connected services".into());
         }
         let id = self.ids.fetch_add(1, Ordering::Relaxed);
         let (tx, rx) = oneshot::channel();

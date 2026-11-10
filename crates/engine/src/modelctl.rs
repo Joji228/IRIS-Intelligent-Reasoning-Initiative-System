@@ -94,7 +94,7 @@ fn label(st: &AppState, (provider, model): &(String, String)) -> String {
 async fn list(st: &AppState, only: Option<String>) -> ToolOutcome {
     let all = providers(st);
     if all.is_empty() {
-        return ok("No providers set up", "No AI providers are set up. The user can add one in Settings → Providers.");
+        return ok("No providers set up", "No AI providers are set up. The user can add one in Settings → AI providers.");
     }
     let mut out = String::new();
     if let Some(d) = st.default_model() {
@@ -160,7 +160,7 @@ async fn resolve_provider(st: &AppState, model: &str, provider: Option<String>) 
             return Err(format!("{} is only used for speech to text, not as a chat model", p.name));
         }
         if !p.usable {
-            return Err(format!("{} has no API key yet; the user can add it in Settings → Providers", p.name));
+            return Err(format!("{} has no API key yet; the user can add it in Settings → AI providers", p.name));
         }
         // Check the id when the provider can list its models.
         if let Ok(models) = models_of(p).await {

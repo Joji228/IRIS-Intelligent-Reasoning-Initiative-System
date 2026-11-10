@@ -48,7 +48,7 @@ object Wav {
  * The phone's microphone as a stream of 20 ms frames of 16 kHz mono audio. It records with
  * the "voice communication" source, so Android applies its own echo cancellation and noise
  * suppression where the phone has them (they are also switched on explicitly below).
- * The same recorder serves Settings → Voice ("Try it") and, later, the call screen.
+ * The same recorder serves Settings → Voice & calls ("Try it") and, later, the call screen.
  */
 class Recorder {
     private var record: AudioRecord? = null

@@ -28,6 +28,8 @@
     RefreshCw,
     Search,
     Server,
+    ShieldCheck,
+    ShieldOff,
     Smartphone,
     Sun,
     Trash2,
@@ -48,23 +50,45 @@
   let { tab: initialTab }: { tab?: SettingsTab } = $props();
   let tab = $state<SettingsTab>(untrack(() => initialTab) ?? 'models');
 
-  const tabs = [
-    { id: 'models', label: 'Models', icon: Cpu },
-    { id: 'providers', label: 'Providers', icon: Server },
-    { id: 'responses', label: 'Personality & memory', icon: MessageSquareText },
-    { id: 'voice', label: 'Voice & calls', icon: Mic },
-    { id: 'routines', label: 'Routines', icon: CalendarClock },
-    { id: 'skills', label: 'Skills', icon: BookOpen },
-    { id: 'connections', label: 'Connections', icon: Plug },
-    { id: 'accounts', label: 'Accounts', icon: KeyRound },
-    { id: 'limits', label: 'Limits', icon: Gauge },
-    { id: 'search', label: 'Search', icon: Search },
-    { id: 'activity', label: 'Activity', icon: Activity },
-    { id: 'devices', label: 'Devices', icon: Smartphone },
-    { id: 'remote', label: 'Remote access', icon: Globe },
-    { id: 'appearance', label: 'Appearance', icon: Palette },
-    { id: 'about', label: 'About', icon: Info },
-  ] as const;
+  // The same groups, names and order as the phone's Settings.
+  const groups: { title: string; tabs: { id: SettingsTab; label: string; icon: typeof Cpu }[] }[] = [
+    {
+      title: 'Assistant',
+      tabs: [
+        { id: 'models', label: 'Models', icon: Cpu },
+        { id: 'providers', label: 'AI providers', icon: Server },
+        { id: 'responses', label: 'Personality & memory', icon: MessageSquareText },
+        { id: 'voice', label: 'Voice & calls', icon: Mic },
+        { id: 'search', label: 'Web search', icon: Search },
+      ],
+    },
+    {
+      title: 'Automation',
+      tabs: [
+        { id: 'routines', label: 'Routines', icon: CalendarClock },
+        { id: 'skills', label: 'Skills', icon: BookOpen },
+        { id: 'connections', label: 'Connected services', icon: Plug },
+        { id: 'accounts', label: 'Saved logins', icon: KeyRound },
+      ],
+    },
+    {
+      title: 'Safety',
+      tabs: [
+        { id: 'approvals', label: 'Approvals', icon: ShieldCheck },
+        { id: 'limits', label: 'Usage limits', icon: Gauge },
+        { id: 'activity', label: 'Activity log', icon: Activity },
+      ],
+    },
+    {
+      title: 'Devices',
+      tabs: [
+        { id: 'devices', label: 'Paired devices', icon: Smartphone },
+        { id: 'remote', label: 'Remote access', icon: Globe },
+        { id: 'appearance', label: 'Appearance', icon: Palette },
+      ],
+    },
+    { title: 'About', tabs: [{ id: 'about', label: 'About & updates', icon: Info }] },
+  ];
 
   // ---- default model -----------------------------------------------------------
 
@@ -761,10 +785,8 @@
       void loadDevices();
     }
     if (tab === 'remote') void loadLink();
-    if (tab === 'models') {
-      void loadFallback();
-      void loadAutoDefault();
-    }
+    if (tab === 'models') void loadFallback();
+    if (tab === 'approvals') void loadAutoDefault();
     if (tab === 'responses') {
       void loadStyle();
       void loadUserMemory();
@@ -778,21 +800,29 @@
 <Modal title="Settings" onclose={() => (app.modal = null)} width={820}>
   <!-- A fixed height, so the window doesn't jump when switching tabs -->
   <div class="flex h-full flex-col md:h-[min(620px,calc(100vh-9rem))] md:flex-row">
-    <nav class="flex shrink-0 gap-1 overflow-x-auto border-b border-line p-2 scroll-none md:block md:w-56 md:space-y-0.5 md:overflow-y-auto md:border-r md:border-b-0 md:p-3">
-      {#each tabs as t (t.id)}
-        <button
-          class="flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] whitespace-nowrap transition md:w-full {tab === t.id
-            ? 'bg-elevated font-medium text-text'
-            : 'text-muted hover:bg-hover hover:text-text'}"
-          onclick={() => (tab = t.id)}
-        >
-          <t.icon size={15} />
-          {t.label}
-        </button>
+    <nav class="flex shrink-0 gap-1 overflow-x-auto border-b border-line p-2 scroll-none md:block md:w-56 md:overflow-y-auto md:border-r md:border-b-0 md:p-3">
+      {#each groups as g, gi (g.title)}
+        <!-- Group headings on wide windows; a thin divider between groups on narrow ones -->
+        <div class="hidden px-3 pb-1 text-[10.5px] font-semibold tracking-[0.08em] text-faint uppercase md:block {gi ? 'pt-4' : 'pt-0.5'}">{g.title}</div>
+        {#if gi}<div class="my-1.5 w-px shrink-0 bg-line md:hidden"></div>{/if}
+        {#each g.tabs as t (t.id)}
+          <button
+            class="settings-tab group relative flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] whitespace-nowrap md:mb-0.5 md:w-full {tab === t.id
+              ? 'bg-elevated font-medium text-text'
+              : 'text-muted hover:bg-hover hover:text-text'}"
+            aria-current={tab === t.id ? 'page' : undefined}
+            onclick={() => (tab = t.id)}
+          >
+            {#if tab === t.id}<span class="settings-tab-bar"></span>{/if}
+            <t.icon size={15} class="transition-transform duration-200 group-hover:scale-110 {tab === t.id ? 'text-accent-hi' : ''}" />
+            {t.label}
+          </button>
+        {/each}
       {/each}
     </nav>
 
     <div class="min-w-0 flex-1 overflow-y-auto p-4 scroll-thin md:p-6">
+      {#key tab}<div class="settings-pane">
       {#if tab === 'models'}
           <!-- Default model: one choice for every agent -->
           <div class="mb-7 rounded-xl border border-accent/30 bg-accent-soft/40 p-4">
@@ -849,28 +879,6 @@
                 levels answer more carefully but are slower and use more tokens.
               </p>
             </div>
-
-            <!-- The auto mode new agents start with -->
-            <div class="mt-4 border-t border-accent/20 pt-4">
-              <div class="label">Auto mode for new agents</div>
-              <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                {#each [{ id: 'off', title: 'Off', text: 'Every command asks you first.' }, { id: 'careful', title: 'Careful', text: 'An AI check approves safe commands.' }, { id: 'full', title: 'Full auto', text: 'Only catastrophic commands ask you.' }] as const as m (m.id)}
-                  <button
-                    class="rounded-xl border px-3 py-2.5 text-left transition {autoDefault === m.id
-                      ? 'border-accent/70 bg-accent-soft'
-                      : 'border-line-strong hover:bg-hover'}"
-                    onclick={() => setAutoDefault(m.id)}
-                  >
-                    <div class="text-[13px] font-medium">{m.title}</div>
-                    <div class="text-[11.5px] text-faint">{m.text}</div>
-                  </button>
-                {/each}
-              </div>
-              <p class="hint">
-                Orbs from "+", designed agents and agents Iris creates start like this; change one later from its chat
-                box. Paying, installing and other risky steps always ask.
-              </p>
-            </div>
           </div>
 
           <!-- Fallback: retried here when the main provider fails -->
@@ -919,7 +927,7 @@
                 </button>
               </div>
               {#if fbProvider === app.defaultModel?.provider}
-                <p class="hint text-warn!">Same provider as the default model: this only helps if that one model fails. Add another provider (Providers tab) for real backup.</p>
+                <p class="hint text-warn!">Same provider as the default model: this only helps if that one model fails. Add another provider (Settings → AI providers) for real backup.</p>
               {:else if fbSaved?.enabled && !fbDirty}
                 <p class="hint">On: <b class="text-text">{fbSaved.model}</b> ({app.providers.find((p) => p.id === fbSaved?.provider)?.name ?? fbSaved.provider})</p>
               {/if}
@@ -1035,7 +1043,7 @@
           {#each styles as st (st.id)}
             {@const on = style.preset === st.id}
             <button
-              class="flex items-start gap-3 rounded-xl border px-3.5 py-3 text-left transition {on
+              class="flex items-start gap-3 choice rounded-xl border px-3.5 py-3 text-left {on
                 ? 'border-accent/60 bg-accent-soft'
                 : 'border-line-strong hover:bg-hover'}"
               onclick={() => (style.preset = st.id)}
@@ -1153,7 +1161,7 @@
       {:else if tab === 'connections'}
         <div class="mb-4 flex items-start justify-between gap-4">
           <div>
-            <h3 class="text-[15px] font-semibold">Connections</h3>
+            <h3 class="text-[15px] font-semibold">Connected services</h3>
             <p class="text-[12.5px] text-faint">
               Services agents can use through MCP servers: GitHub, Gmail, a database, your notes… Iris can use them;
               other agents need the Connections switch. Tools that change things ask you first unless you trust them.
@@ -1284,7 +1292,7 @@
       {:else if tab === 'accounts'}
         <div class="mb-4 flex items-start justify-between gap-4">
           <div>
-            <h3 class="text-[15px] font-semibold">Accounts</h3>
+            <h3 class="text-[15px] font-semibold">Saved logins</h3>
             <p class="text-[12.5px] text-faint">
               Logins agents can use in their browser. Stored encrypted on this computer. Agents only see the name and
               site; the browser fills the login itself, and only on that site. Paying or ordering always asks you.
@@ -1399,7 +1407,7 @@
               <div class="grid grid-cols-3 gap-2 max-sm:grid-cols-1">
                 {#each [{ id: 'prompt', label: 'Task for the agent', hint: 'The agent gets this as a message and does it.' }, { id: 'heartbeat', label: 'Heartbeat', hint: 'The agent checks a list; you only hear about it when something needs you.' }, { id: 'command', label: 'Command (no AI)', hint: 'PowerShell runs on its own; the agent only hears about failures.' }] as const as k (k.id)}
                   <button
-                    class="rounded-xl border px-3.5 py-2.5 text-left transition {rtForm.kind === k.id
+                    class="choice rounded-xl border px-3.5 py-2.5 text-left {rtForm.kind === k.id
                       ? 'border-accent/60 bg-accent-soft'
                       : 'border-line-strong hover:bg-hover'}"
                     onclick={() => rtForm && (rtForm.kind = k.id)}
@@ -1495,8 +1503,60 @@
             {/if}
           {/each}
         </div>
+      {:else if tab === 'approvals'}
+        <h3 class="text-[15px] font-semibold">Approvals</h3>
+        <p class="mt-1 mb-5 text-[12.5px] text-faint">
+          When agents may run commands without asking you. Paying, installing apps, power and other risky steps always ask.
+        </p>
+        {@const modes = [
+          { id: 'off', title: 'Ask me', text: 'Every command waits for you.', icon: ShieldOff },
+          { id: 'careful', title: 'Careful auto', text: 'An AI check approves normal, safe steps.', icon: ShieldCheck },
+          { id: 'full', title: 'Full auto', text: 'Only catastrophic commands ask you.', icon: Zap },
+        ] as const}
+        <div class="label">New agents start with</div>
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          {#each modes as m (m.id)}
+            <button
+              class="choice rounded-xl border px-3 py-2.5 text-left {autoDefault === m.id ? 'border-accent/70 bg-accent-soft' : 'border-line-strong hover:bg-hover'}"
+              aria-pressed={autoDefault === m.id}
+              onclick={() => setAutoDefault(m.id)}
+            >
+              <div class="flex items-center gap-1.5 text-[13px] font-medium">
+                <m.icon size={14} class={autoDefault === m.id ? 'text-accent-hi' : 'text-faint'} />{m.title}
+              </div>
+              <div class="mt-0.5 text-[11.5px] text-faint">{m.text}</div>
+            </button>
+          {/each}
+        </div>
+        <p class="hint">Orbs from "+", designed agents and agents Iris creates start like this.</p>
+
+        <div class="label mt-7">Your agents</div>
+        <div class="divide-y divide-line overflow-hidden rounded-xl border border-line">
+          {#each app.orderedAgents as a (a.id)}
+            {@const own = app.autoModeOf(a)}
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-2 px-3.5 py-2.5">
+              <div class="flex min-w-0 flex-1 items-center gap-2.5">
+                <AgentAvatar agent={a} size={26} />
+                <div class="min-w-0">
+                  <div class="truncate text-[13px] font-medium">{a.name}</div>
+                  {#if app.autoFor(a) === 'inherited'}
+                    <div class="truncate text-[11px] text-faint">Also follows the agent that created it</div>
+                  {/if}
+                </div>
+              </div>
+              <div class="segmented" role="radiogroup" aria-label="Auto mode for {a.name}">
+                {#each modes as m (m.id)}
+                  <button role="radio" aria-checked={own === m.id} class={own === m.id ? 'on' : ''} onclick={() => own !== m.id && app.setAgentAuto(a.id, m.id)}>
+                    {m.id === 'off' ? 'Ask' : m.id === 'careful' ? 'Careful' : 'Full'}
+                  </button>
+                {/each}
+              </div>
+            </div>
+          {/each}
+        </div>
+        <p class="hint">The same switch as the Auto button in each agent's chat box.</p>
       {:else if tab === 'limits'}
-        <h3 class="text-[15px] font-semibold">Token limits</h3>
+        <h3 class="text-[15px] font-semibold">Usage limits</h3>
         <p class="mb-5 text-[12.5px] text-faint">
           Caps for all agents together. When one is reached, agents stop until it resets (days at midnight, weeks
           on Monday) or you raise it.
@@ -1556,7 +1616,7 @@
               id: 'deepseek',
               title: 'DeepSeek',
               text: search?.has_deepseek_key === false
-                ? 'Needs a DeepSeek provider with a key (Settings → Providers).'
+                ? 'Needs a DeepSeek provider with a key (Settings → AI providers).'
                 : 'DeepSeek’s own search engine, with your DeepSeek key. About $0.75 per 1,000 searches from your DeepSeek balance; pages other readers can’t open are read through DeepSeek too.',
             },
           ] as const as o (o.id)}
@@ -1603,7 +1663,7 @@
       {:else if tab === 'activity'}
         <div class="mb-4 flex items-center justify-between">
           <div>
-            <h3 class="text-[15px] font-semibold">Activity</h3>
+            <h3 class="text-[15px] font-semibold">Activity log</h3>
             <p class="text-[12.5px] text-faint">Every tool your agents used, newest first.</p>
           </div>
           <button class="btn-ghost" onclick={loadAudit} aria-label="Refresh">
@@ -1785,7 +1845,7 @@
         <div class="grid max-w-md grid-cols-2 gap-3">
           {#each [{ id: 'dark', label: 'Dark', icon: Moon }, { id: 'light', label: 'Light', icon: Sun }] as const as t (t.id)}
             <button
-              class="flex items-center gap-3 rounded-xl border px-4 py-3.5 text-[13.5px] transition {app.theme === t.id
+              class="flex items-center gap-3 choice rounded-xl border px-4 py-3.5 text-[13.5px] {app.theme === t.id
                 ? 'border-accent/70 bg-accent-soft'
                 : 'border-line-strong hover:bg-hover'}"
               onclick={() => app.setTheme(t.id)}
@@ -1803,7 +1863,7 @@
         <div class="grid max-w-md grid-cols-3 gap-3">
           {#each [{ id: 'always', label: 'Always' }, { id: 'system', label: 'Follow Windows' }, { id: 'off', label: 'Off' }] as const as m (m.id)}
             <button
-              class="rounded-xl border px-3 py-3 text-[13px] transition {app.motion === m.id
+              class="choice rounded-xl border px-3 py-3 text-[13px] {app.motion === m.id
                 ? 'border-accent/70 bg-accent-soft'
                 : 'border-line-strong hover:bg-hover'}"
               onclick={() => app.setMotion(m.id)}>{m.label}</button
@@ -1897,6 +1957,7 @@
           <p class="mt-2 text-[13px] text-faint">Update information isn't available from this engine yet.</p>
         {/if}
       {/if}
+      </div>{/key}
     </div>
   </div>
 </Modal>

@@ -4,6 +4,13 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.composed
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -188,11 +195,13 @@ fun Chips(options: List<Pair<String, String>>, selected: String?, mono: Boolean 
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         for ((value, label) in options) {
             val on = value == selected
+            val bg by animateColorAsState(if (on) C.accentSoft else Color.Transparent, Motion.quick(), label = "chip")
+            val edge by animateColorAsState(if (on) C.accent.copy(alpha = 0.7f) else C.lineStrong, Motion.quick(), label = "chipEdge")
             Txt(
                 label, 14.sp, if (on) C.text else C.muted, if (on) FontWeight.Medium else FontWeight.Normal, mono = mono,
                 modifier = Modifier
-                    .background(if (on) C.accentSoft else Color.Transparent, RoundedCornerShape(50))
-                    .border(1.dp, if (on) C.accent.copy(alpha = 0.7f) else C.lineStrong, RoundedCornerShape(50))
+                    .background(bg, RoundedCornerShape(50))
+                    .border(1.dp, edge, RoundedCornerShape(50))
                     .press { onSelect(value) }
                     .padding(horizontal = 16.dp, vertical = 10.dp),
             )
@@ -279,5 +288,42 @@ fun Badge(text: String, color: Color, icon: ImageVector? = null) {
     ) {
         if (icon != null) Icon(icon, color, 10.dp)
         Txt(text, 10.5.sp, color, FontWeight.Medium)
+    }
+}
+
+/** A small heading over a group of settings (Assistant, Automation, Safety…). */
+@Composable
+fun GroupTitle(text: String) =
+    Txt(text.uppercase(), 11.5.sp, C.faint, FontWeight.SemiBold, Modifier.padding(start = 8.dp, top = 4.dp))
+
+/** A compact switch between a few options, with the chosen one highlighted. */
+@Composable
+fun Segmented(options: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit) {
+    Row(
+        Modifier.border(1.dp, C.lineStrong, RoundedCornerShape(12.dp)).padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        for ((id, label) in options) {
+            val on = id == selected
+            val bg by animateColorAsState(if (on) C.accentSoft else Color.Transparent, Motion.quick(), label = "seg")
+            val fg by animateColorAsState(if (on) C.accentHi else C.muted, Motion.quick(), label = "segText")
+            Txt(
+                label, 12.5.sp, fg, if (on) FontWeight.SemiBold else FontWeight.Normal,
+                Modifier.clip(RoundedCornerShape(9.dp)).background(bg)
+                    .press(role = Role.RadioButton) { onSelect(id) }
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+            )
+        }
+    }
+}
+
+/** Fades and lifts a block in when it first shows; `index` staggers a list of them. */
+fun Modifier.appearIn(index: Int = 0): Modifier = composed {
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { shown = true }
+    val k by animateFloatAsState(if (shown) 1f else 0f, tween(320, delayMillis = 45 * index, easing = Motion.ease), label = "appear")
+    graphicsLayer {
+        alpha = k
+        translationY = (1f - k) * 14.dp.toPx()
     }
 }

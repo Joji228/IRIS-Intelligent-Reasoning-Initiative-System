@@ -242,7 +242,7 @@ fn error_status(e: &ProviderError) -> u16 {
 /// Turns a recording into text.
 pub async fn transcribe(st: &AppState, audio: Vec<u8>, mime: &str, language: Option<&str>) -> Result<String, VoiceError> {
     let (id, provider, model) = transcriber(st).ok_or_else(|| {
-        VoiceError::new(400, "voice input needs a Groq or OpenAI provider with a key (Settings → Providers)")
+        VoiceError::new(400, "voice input needs a Groq or OpenAI provider with a key (Settings → AI providers)")
     })?;
     let client = st
         .providers

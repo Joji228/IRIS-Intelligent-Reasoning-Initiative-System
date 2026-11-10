@@ -312,7 +312,7 @@ pub struct SearchStatus {
     pub active: String,
 }
 
-/// The key of the DeepSeek provider (Settings → Providers), if there is one.
+/// The key of the DeepSeek provider (Settings → AI providers), if there is one.
 fn deepseek_key(cfg: &Config) -> Option<String> {
     cfg.providers
         .iter()

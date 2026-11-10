@@ -119,7 +119,7 @@ private fun AllowanceMeter(l: VoiceLimits) {
     }
 }
 
-/** Settings → Voice: speech to text (on the server, with Groq), the phone's voices, call options, and a test. */
+/** Settings → Voice & calls: speech to text (on the server, with Groq), the phone's voices, call options, and a test. */
 @Composable
 fun VoicePage(vm: IrisViewModel, back: () -> Unit) {
     val context = LocalContext.current
@@ -208,7 +208,7 @@ fun VoicePage(vm: IrisViewModel, back: () -> Unit) {
         }
     }
 
-    Page("Voice", back, subtitle = "Speech, voices, calls") {
+    Page("Voice & calls", back, subtitle = "Speech, voices, calls") {
         item {
             Card(accent = true) {
                 CardTitle("Speech to text", "Your voice becomes text on your server, using Groq's free Whisper.")
@@ -223,7 +223,7 @@ fun VoicePage(vm: IrisViewModel, back: () -> Unit) {
                         }
                         else -> {
                             Dot(C.warn)
-                            Txt("Add a Groq key on the server (Settings → Providers on the desktop app)", 13.5.sp, C.warn, lineHeight = 18.sp)
+                            Txt("Add a Groq key on the server (Settings → AI providers on the desktop app)", 13.5.sp, C.warn, lineHeight = 18.sp)
                         }
                     }
                 }

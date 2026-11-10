@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.util.Locale
 
-/** One text-to-speech voice the phone has, as Settings → Voice lists it. */
+/** One text-to-speech voice the phone has, as Settings → Voice & calls lists it. */
 data class VoiceChoice(
     val name: String,
     val label: String,
@@ -140,7 +140,7 @@ class Speaker(
 
     /**
      * Adds one sentence to the queue, in the language it is written in ([languageOf]) with the
-     * voice and speed chosen in Settings → Voice. [flush] drops whatever is queued first.
+     * voice and speed chosen in Settings → Voice & calls. [flush] drops whatever is queued first.
      */
     fun say(text: String, settings: VoiceSettings, flush: Boolean = false) {
         val engine = tts?.takeIf { ready.value } ?: return

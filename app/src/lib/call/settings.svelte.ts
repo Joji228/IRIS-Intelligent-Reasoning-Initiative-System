@@ -1,4 +1,4 @@
-// Settings → Voice, kept in this browser or desktop app (like the phone keeps its own): what you
+// Settings → Voice & calls, kept in this browser or desktop app (like the phone keeps its own): what you
 // speak, the voices, the speed and how calls behave.
 
 export interface VoiceSettings {

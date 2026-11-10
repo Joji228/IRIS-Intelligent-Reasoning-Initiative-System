@@ -329,7 +329,7 @@ impl Reply<'_> {
         let Some(primary) = self.state.resolve_model(self.agent) else {
             return self.finish(
                 MessageStatus::Error,
-                Some("No AI provider is set up yet. Add one in Settings → Providers.".into()),
+                Some("No AI provider is set up yet. Add one in Settings → AI providers.".into()),
                 Totals::default(),
             );
         };
@@ -503,10 +503,10 @@ impl Reply<'_> {
     fn connect(&self, (provider_id, model): &(String, String)) -> Result<Conn, String> {
         let providers = self.state.providers.read().unwrap();
         let Some(p) = providers.get(provider_id) else {
-            return Err(format!("Unknown provider {provider_id:?}. Check Settings → Providers."));
+            return Err(format!("Unknown provider {provider_id:?}. Check Settings → AI providers."));
         };
         if p.key_source == crate::providers::KeySource::None && !is_local(&p.base_url) {
-            return Err(format!("No API key is set for {}. Add your key in Settings → Providers.", p.name));
+            return Err(format!("No API key is set for {}. Add your key in Settings → AI providers.", p.name));
         }
         Ok(Conn {
             provider_name: p.name.clone(),
@@ -731,7 +731,7 @@ impl Reply<'_> {
                     tools::ToolOutcome {
                         ok: true,
                         output: if list.is_empty() {
-                            "No saved accounts. The user can add them in Settings → Accounts.".into()
+                            "No saved accounts. The user can add them in Settings → Saved logins.".into()
                         } else {
                             format!("Saved accounts (use browser_login on the site's sign-in page):\n{}", list.join("\n"))
                         },

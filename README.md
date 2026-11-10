@@ -7,9 +7,9 @@
 **Your own team of AI agents, running on your own PC.**<br>
 Chat with them from your desktop, any browser, or your Android phone.
 
-<a href="https://github.com/Joji228/IRIS-Intelligent-Reasoning-Initiative-System/releases/download/v0.2.6/IRIS-Setup-x64-v0.2.6.exe"><img src="https://img.shields.io/badge/Download%20for%20Windows-v0.2.6-8b5cf6?style=for-the-badge" alt="Download for Windows (.exe)" height="40"></a>
+<a href="https://github.com/Joji228/IRIS-Intelligent-Reasoning-Initiative-System/releases/download/v0.2.7/IRIS-Setup-x64-v0.2.7.exe"><img src="https://img.shields.io/badge/Download%20for%20Windows-v0.2.7-8b5cf6?style=for-the-badge" alt="Download for Windows (.exe)" height="40"></a>
 &nbsp;
-<a href="https://github.com/Joji228/IRIS-Intelligent-Reasoning-Initiative-System/releases/download/v0.2.6/IRIS-Android-v0.2.6.apk"><img src="https://img.shields.io/badge/Download%20for%20Android-v0.2.6-34d399?style=for-the-badge&logo=android&logoColor=white" alt="Download for Android (.apk)" height="40"></a>
+<a href="https://github.com/Joji228/IRIS-Intelligent-Reasoning-Initiative-System/releases/download/v0.2.7/IRIS-Android-v0.2.7.apk"><img src="https://img.shields.io/badge/Download%20for%20Android-v0.2.7-34d399?style=for-the-badge&logo=android&logoColor=white" alt="Download for Android (.apk)" height="40"></a>
 
 <sub>Windows 10/11 (64-bit) · Android 10+ · Free and open source ([MIT](LICENSE))</sub>
 
@@ -49,9 +49,9 @@ Chat with them from your desktop, any browser, or your Android phone.
 
 ## Install (5 minutes)
 
-1. **Download** [**IRIS-Setup-x64-v0.2.6.exe**](https://github.com/Joji228/IRIS-Intelligent-Reasoning-Initiative-System/releases/download/v0.2.6/IRIS-Setup-x64-v0.2.6.exe) and run it.<br>
+1. **Download** [**IRIS-Setup-x64-v0.2.7.exe**](https://github.com/Joji228/IRIS-Intelligent-Reasoning-Initiative-System/releases/download/v0.2.7/IRIS-Setup-x64-v0.2.7.exe) and run it.<br>
    <sub>Windows may warn because the installer isn't signed yet: **More info → Run anyway**.</sub>
-2. **Add a model.** Open **Settings → Providers** and paste an API key, for example from [DeepSeek](https://platform.deepseek.com/) (cheap and capable).
+2. **Add a model.** Open **Settings → AI providers** and paste an API key, for example from [DeepSeek](https://platform.deepseek.com/) (cheap and capable).
 3. **Say hi to Iris.** Ask her anything, or press **+** and describe the agent you want.
 
 That's it. I.R.I.S. starts with Windows and lives in the tray, so your agents keep working while the window is closed.
@@ -75,7 +75,7 @@ The phone app always connects through a relay, which keeps everything end-to-end
    ```
 4. In I.R.I.S., open **Settings → Remote access**, paste that address, and turn it on.
 5. **Pair a device:**
-   - **Android:** install [**IRIS-Android-v0.2.6.apk**](https://github.com/Joji228/IRIS-Intelligent-Reasoning-Initiative-System/releases/download/v0.2.6/IRIS-Android-v0.2.6.apk) (allow installs from your browser when asked) and scan the QR code shown in Settings. Allow notifications, and set battery use to *Unrestricted* so they arrive.
+   - **Android:** install [**IRIS-Android-v0.2.7.apk**](https://github.com/Joji228/IRIS-Intelligent-Reasoning-Initiative-System/releases/download/v0.2.7/IRIS-Android-v0.2.7.apk) (allow installs from your browser when asked) and scan the QR code shown in Settings. Allow notifications, and set battery use to *Unrestricted* so they arrive.
      <br><sub>Coming from 0.1.0? Uninstall that one first: since 0.2.0 the app is signed with a permanent key and Android won't update over an app signed with a different one. You pair the phone again; nothing on your PC is affected.</sub>
    - **Any browser:** open your relay address and scan the same QR code, or type the pairing code.
 
@@ -88,12 +88,12 @@ The phone app can call any agent, in **English or Greek**: you talk, the agent a
 - **Thinking** is still your normal model (DeepSeek by default). Groq is never a chat model here.
 
 1. **Get a free key** at [console.groq.com](https://console.groq.com/keys) (no card needed).
-2. **Add it on the PC:** in I.R.I.S., open **Settings → Providers → Add provider → Groq** and paste the key. Leave your default model and fallback on DeepSeek. Don't paste the key anywhere else, and never in a chat.
-3. **On the phone:** open **Settings → Voice**. It should say *Groq · whisper-large-v3 · ready*. Install the English and Greek voices there if one is missing, and use **Try it** to check that it hears you.
+2. **Add it on the PC:** in I.R.I.S., open **Settings → AI providers → Add provider → Groq** and paste the key. Leave your default model and fallback on DeepSeek. Don't paste the key anywhere else, and never in a chat.
+3. **On the phone:** open **Settings → Voice & calls**. It should say *Groq · whisper-large-v3 · ready*. Install the English and Greek voices there if one is missing, and use **Try it** to check that it hears you.
 4. **Call:** open a chat and press the phone button in the header. The first time, Android asks for the microphone.
 5. **Or from the PC or a browser:** the desktop app and the relay's web app have the same phone button in every chat header (Settings → Voice & calls has the same options). Headphones work best there; Space stops Iris, M mutes.
 
-Calls understand English and Greek only. **Settings → Voice** shows how many of today's free spoken turns are left, lets you pick the voices, and has test buttons that play through the loudspeaker.
+Calls understand English and Greek only. **Settings → Voice & calls** shows how many of today's free spoken turns are left, lets you pick the voices, and has test buttons that play through the loudspeaker.
 
 On a call, Iris keeps her answers short. Longer material (code, tables, links) goes in the chat under a "Details" line instead of being read out. Approvals are never given by voice: they appear on the call screen and need a tap.
 

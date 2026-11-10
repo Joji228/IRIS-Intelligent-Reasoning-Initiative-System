@@ -565,7 +565,7 @@ private fun RoundButton(
 
 /**
  * The phone button in the chat header. With a call going it returns to the call screen. Otherwise
- * it starts one: if the server can't turn speech into text yet it opens Settings → Voice instead,
+ * it starts one: if the server can't turn speech into text yet it opens Settings → Voice & calls instead,
  * and the first time it asks for the microphone.
  */
 @Composable

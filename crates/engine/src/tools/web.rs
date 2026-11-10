@@ -98,7 +98,7 @@ fn deepseek_error(status: reqwest::StatusCode, body: &str) -> String {
         .and_then(|v| v["error"]["message"].as_str().map(str::to_owned))
         .unwrap_or_else(|| truncate(body, 200));
     match status.as_u16() {
-        401 => "DeepSeek refused the API key (Settings → Providers)".into(),
+        401 => "DeepSeek refused the API key (Settings → AI providers)".into(),
         402 => "the DeepSeek balance is empty: top it up to keep searching".into(),
         429 => "DeepSeek's search limit was hit; wait a moment and try again".into(),
         _ => format!("DeepSeek returned {status}: {detail}"),
@@ -215,7 +215,7 @@ async fn duckduckgo(ctx: &ToolContext, query: &str, max: usize) -> Result<Vec<Hi
     let hits = parse_duckduckgo(&body, max);
     if hits.is_empty() && (body.contains("anomaly") || body.contains("captcha")) {
         return Err("DuckDuckGo is rate-limiting searches right now. For reliable search, add a free \
-                    Tavily key in Settings → Search."
+                    Tavily key in Settings → Web search."
             .into());
     }
     Ok(hits)

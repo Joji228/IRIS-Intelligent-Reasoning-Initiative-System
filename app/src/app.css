@@ -296,6 +296,104 @@ select:focus-visible {
 }
 @utility btn {
   @apply inline-flex items-center justify-center gap-1.5 rounded-xl px-3.5 py-2 text-[13px] font-medium transition disabled:opacity-50;
+  /* A small press: buttons sink a little and spring back. */
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+  transition-duration: 160ms;
+  transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1.2);
+  &:active:not(:disabled) {
+    transform: scale(0.96);
+    transition-duration: 60ms;
+  }
+}
+
+/* ---- press & motion polish ------------------------------------------------ */
+/* Choice cards and Settings tabs press like buttons. */
+.choice,
+.settings-tab {
+  transition:
+    color 160ms,
+    background-color 160ms,
+    border-color 160ms,
+    box-shadow 160ms,
+    transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1.2);
+}
+.choice:hover {
+  transform: translateY(-1px);
+}
+.choice:active,
+.settings-tab:active {
+  transform: scale(0.97);
+  transition-duration: 60ms;
+}
+/* The selected Settings tab gets an accent bar that grows in. */
+.settings-tab-bar {
+  position: absolute;
+  left: 0;
+  top: 22%;
+  bottom: 22%;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--color-accent);
+  animation: tab-bar 220ms cubic-bezier(0.2, 0.8, 0.2, 1.2);
+}
+@media (max-width: 767px) {
+  .settings-tab-bar {
+    left: 22%;
+    right: 22%;
+    top: auto;
+    bottom: 1px;
+    width: auto;
+    height: 2px;
+  }
+}
+@keyframes tab-bar {
+  from {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+}
+/* Switching a Settings tab fades and lifts the page in. */
+.settings-pane {
+  animation: pane-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes pane-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+/* A small segmented switch (Settings → Approvals). */
+.segmented {
+  @apply inline-flex shrink-0 rounded-lg border border-line-strong bg-surface p-0.5;
+}
+.segmented > button {
+  @apply rounded-md px-2.5 py-1 text-[12px] text-muted;
+  transition:
+    color 160ms,
+    background-color 160ms,
+    transform 160ms cubic-bezier(0.2, 0.8, 0.2, 1.2);
+}
+.segmented > button:hover {
+  @apply text-text;
+}
+.segmented > button.on {
+  @apply bg-accent-soft font-medium text-accent-hi;
+}
+.segmented > button:active {
+  transform: scale(0.94);
+}
+/* The Animations setting: Off, or Follow Windows when Windows asks for less motion. */
+:root[data-motion='off'] :is(.btn-primary, .btn-ghost, .btn-outline, .btn-danger, .choice, .settings-tab, .segmented > button),
+:root[data-motion='off'] :is(.settings-pane, .settings-tab-bar) {
+  transform: none !important;
+  animation: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-motion='system'] :is(.btn-primary, .btn-ghost, .btn-outline, .btn-danger, .choice, .settings-tab, .segmented > button),
+  :root[data-motion='system'] :is(.settings-pane, .settings-tab-bar) {
+    transform: none !important;
+    animation: none !important;
+  }
 }
 .btn-primary {
   @apply btn bg-accent text-on-accent hover:bg-accent-hi;

@@ -83,7 +83,7 @@ pub struct AppState {
     pub defaults: Arc<RwLock<config::DefaultsConfig>>,
     /// Daily / weekly token caps (0 = no limit).
     pub limits: Arc<RwLock<config::LimitsConfig>>,
-    /// How agents talk to the user (Settings → Responses).
+    /// How agents talk to the user (Settings → Personality & memory).
     pub style: Arc<RwLock<config::StyleConfig>>,
     /// The device behind local-token.txt (the desktop app); it can't be revoked.
     pub local_device_id: Arc<Option<String>>,
@@ -173,14 +173,14 @@ impl AppState {
         let (today, week) = self.token_usage();
         if limits.daily_tokens > 0 && today + extra >= limits.daily_tokens as i64 {
             return Some(format!(
-                "Daily token limit reached ({} of {}). It resets at midnight, or raise it in Settings → Limits.",
+                "Daily token limit reached ({} of {}). It resets at midnight, or raise it in Settings → Usage limits.",
                 today + extra,
                 limits.daily_tokens
             ));
         }
         if limits.weekly_tokens > 0 && week + extra >= limits.weekly_tokens as i64 {
             return Some(format!(
-                "Weekly token limit reached ({} of {}). It resets on Monday, or raise it in Settings → Limits.",
+                "Weekly token limit reached ({} of {}). It resets on Monday, or raise it in Settings → Usage limits.",
                 week + extra,
                 limits.weekly_tokens
             ));

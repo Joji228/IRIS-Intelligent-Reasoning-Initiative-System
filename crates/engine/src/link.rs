@@ -14,7 +14,7 @@
 //!    with the counter `n` as nonce; counters only go up, so replays fail.
 //! 3. **Sign-in.** `auth` (a device token), `pair` (a one-time code from the
 //!    QR) or `login` (username + password, for browsers). Pairing and login
-//!    create a device with its own token, revocable in Settings → Devices.
+//!    create a device with its own token, revocable in Settings → Paired devices.
 //! 4. **Use.** `req` carries any API request (answered by the engine's own
 //!    router, so every feature works remotely); live events are pushed as `ev`.
 //!

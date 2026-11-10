@@ -33,26 +33,42 @@ import dev.iris.app.data.SearchStatus
 import dev.iris.app.data.formatTokens
 import dev.iris.app.data.modelName
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
-/** The sections, in the desktop's order (Settings.svelte), minus Appearance, which only the desktop app has. */
+/**
+ * The sections in groups, with the desktop's names and order (Settings.svelte). The phone has
+ * Notifications where the desktop has Appearance (the phone follows its own light/dark setting).
+ */
 private data class Section(val id: String, val title: String, val icon: androidx.compose.ui.graphics.vector.ImageVector, val hint: String)
 
-private val SECTIONS = listOf(
-    Section("notifications", "Notifications", Lucide.Bell, "Push to this phone, what gets sent"),
-    Section("voice", "Voice", Lucide.Mic, "Speech, voices, calls"),
-    Section("models", "Models", Lucide.Cpu, "Default model, thinking, auto mode, fallback"),
-    Section("responses", "Personality & memory", Lucide.MessageText, "How agents talk, what they know about you"),
-    Section("routines", "Routines", Lucide.Calendar, "What agents do on a schedule"),
-    Section("skills", "Skills", Lucide.BookOpen, "How-tos the team saved"),
-    Section("connections", "Connections", Lucide.Plug, "Services connected over MCP"),
-    Section("limits", "Limits", Lucide.Gauge, "Daily and weekly token caps"),
-    Section("search", "Search", Lucide.Search, "Which web search agents use"),
-    Section("activity", "Activity", Lucide.Activity, "Every tool the agents used"),
-    Section("devices", "Devices", Lucide.Smartphone, "Phones and browsers with access"),
-    Section("remote", "Remote access", Lucide.Globe, "The relay link, pairing a device"),
-    Section("providers", "Providers", Lucide.Server, "AI services and their keys"),
-    Section("accounts", "Accounts", Lucide.KeyRound, "Logins agents may use"),
-    Section("about", "About", Lucide.Info, "This app, unpairing"),
+private val GROUPS = listOf(
+    "Assistant" to listOf(
+        Section("models", "Models", Lucide.Cpu, "Default, reasoning, fallback"),
+        Section("providers", "AI providers", Lucide.Server, "AI services and their keys"),
+        Section("responses", "Personality & memory", Lucide.MessageText, "Tone, and what they know about you"),
+        Section("voice", "Voice & calls", Lucide.Mic, "Speech, voices, calls"),
+        Section("search", "Web search", Lucide.Search, "Which search engine agents use"),
+    ),
+    "Automation" to listOf(
+        Section("routines", "Routines", Lucide.Calendar, "What agents do on a schedule"),
+        Section("skills", "Skills", Lucide.BookOpen, "How-tos the team saved"),
+        Section("connections", "Connected services", Lucide.Plug, "Email, issues and more (MCP)"),
+        Section("accounts", "Saved logins", Lucide.KeyRound, "Website logins agents may use"),
+    ),
+    "Safety" to listOf(
+        Section("approvals", "Approvals", Lucide.ShieldCheck, "When agents act on their own"),
+        Section("limits", "Usage limits", Lucide.Gauge, "Daily and weekly token caps"),
+        Section("activity", "Activity log", Lucide.Activity, "Every tool the agents used"),
+    ),
+    "Devices" to listOf(
+        Section("devices", "Paired devices", Lucide.Smartphone, "Phones and browsers"),
+        Section("remote", "Remote access", Lucide.Globe, "The relay link, pairing a device"),
+        Section("notifications", "Notifications", Lucide.Bell, "What this phone is told about"),
+    ),
+    "About" to listOf(
+        Section("about", "About & updates", Lucide.Info, "Version, updates, unpairing"),
+    ),
 )
 
 @Composable
@@ -60,17 +76,23 @@ fun SettingsScreen(vm: IrisViewModel, page: String?) {
     val back = { vm.back(); Unit }
     when (page) {
         null -> Page("Settings", back, subtitle = "On your server · changes apply right away") {
-            item {
-                Card(padding = false) {
-                    Column {
-                        SECTIONS.forEachIndexed { i, s ->
-                            if (i > 0) Divider(inset = true)
-                            NavRow(s.icon, s.title, s.hint) { vm.open(Screen.Settings(s.id)) }
+            GROUPS.forEachIndexed { gi, (title, sections) ->
+                item(key = title) {
+                    Column(Modifier.appearIn(gi), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        GroupTitle(title)
+                        Card(padding = false) {
+                            Column {
+                                sections.forEachIndexed { i, s ->
+                                    if (i > 0) Divider(inset = true)
+                                    NavRow(s.icon, s.title, s.hint) { vm.open(Screen.Settings(s.id)) }
+                                }
+                            }
                         }
                     }
                 }
             }
         }
+        "approvals" -> ApprovalsPage(vm, back)
         "models" -> ModelsPage(vm, back)
         "responses" -> ResponsesPage(vm, back)
         "limits" -> LimitsPage(vm, back)
@@ -90,13 +112,11 @@ private fun ModelsPage(vm: IrisViewModel, back: () -> Unit) {
     val overlays = LocalOverlays.current
     val scope = rememberCoroutineScope()
     var reasoning by remember { mutableStateOf<String?>(null) }
-    var auto by remember { mutableStateOf<String?>(null) }
     var fallback by remember { mutableStateOf<Fallback?>(null) }
     var saving by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         vm.loadModelSettings()
         reasoning = vm.attempt { reasoning() }?.effort
-        auto = vm.attempt { autoDefault() }?.mode
         fallback = vm.attempt { fallback() }
     }
     val dm = vm.defaultModel
@@ -131,15 +151,6 @@ private fun ModelsPage(vm: IrisViewModel, back: () -> Unit) {
                         scope.launch { vm.attempt { putReasoning(level) }?.let { reasoning = it.effort } }
                     }
                     Hint("How hard all agents think, including Iris. Higher levels answer more carefully but are slower and use more tokens.")
-                }
-                Divider()
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Label("Auto mode for new agents")
-                    ChoiceCards(AUTO_MODES, auto ?: "") { mode ->
-                        auto = mode
-                        scope.launch { vm.attempt { putAutoDefault(mode) }?.let { auto = it.mode } }
-                    }
-                    Hint("New orbs and agents Iris creates start like this. Paying, installing and other risky steps always ask.")
                 }
             }
         }
@@ -181,10 +192,50 @@ private fun ModelsPage(vm: IrisViewModel, back: () -> Unit) {
 }
 
 val AUTO_MODES = listOf(
-    Triple("off", "Off", "Every command asks you first."),
-    Triple("careful", "Careful", "An AI check approves safe commands."),
+    Triple("off", "Ask me", "Every command waits for you."),
+    Triple("careful", "Careful auto", "An AI check approves normal, safe steps."),
     Triple("full", "Full auto", "Only catastrophic commands ask you."),
 )
+
+// ---- Approvals -------------------------------------------------------------------------
+
+@Composable
+private fun ApprovalsPage(vm: IrisViewModel, back: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var auto by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) { auto = vm.attempt { autoDefault() }?.mode }
+    Page("Approvals", back, subtitle = "When agents run commands on their own") {
+        item {
+            Card {
+                CardTitle("New agents start with", "Orbs from \"+\" and agents Iris creates. Paying, installing apps, power and other risky steps always ask.")
+                ChoiceCards(AUTO_MODES, auto ?: "") { mode ->
+                    auto = mode
+                    scope.launch { vm.attempt { putAutoDefault(mode) }?.let { auto = it.mode } }
+                }
+            }
+        }
+        item {
+            Card {
+                CardTitle("Your agents", "The same switch as the Auto button in each agent's chat.")
+                vm.orderedAgents.forEachIndexed { i, a ->
+                    if (i > 0) Divider()
+                    val own = if (!a.autoApprove) "off" else if (a.autoFull) "full" else "careful"
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Orb(a, 30.dp)
+                        Txt(a.name, 15.sp, C.text, FontWeight.Medium, Modifier.weight(1f), maxLines = 1)
+                        Segmented(listOf("off" to "Ask", "careful" to "Careful", "full" to "Full"), own) { mode ->
+                            if (mode != own) vm.patchAgent(
+                                a.id,
+                                buildJsonObject { put("auto_approve", mode != "off"); put("auto_full", mode == "full") },
+                                when (mode) { "full" -> "${a.name}: Full auto"; "careful" -> "${a.name}: Careful auto"; else -> "${a.name}: asks every time" },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 // ---- Personality & memory --------------------------------------------------------------
 
@@ -256,7 +307,7 @@ private fun LimitsPage(vm: IrisViewModel, back: () -> Unit) {
     var weekly by remember { mutableLongStateOf(0L) }
     var busy by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { vm.attempt { limits() }?.let { limits = it; daily = it.dailyTokens; weekly = it.weeklyTokens } }
-    Page("Limits", back) {
+    Page("Usage limits", back) {
         item { Hint("Caps for all agents together. When one is reached, agents stop until it resets (days at midnight, weeks on Monday) or you raise it.") }
         for ((label, presets, row) in listOf(Triple("Daily limit", DAILY, 0), Triple("Weekly limit", WEEKLY, 1))) {
             item(label) {
@@ -298,7 +349,7 @@ private fun SearchPage(vm: IrisViewModel, back: () -> Unit) {
     var key by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { vm.attempt { search() }?.let { status = it; provider = it.provider } }
-    Page("Search", back) {
+    Page("Web search", back) {
         item {
             Card {
                 CardTitle("Web search", status?.let { "Agents search with ${if (it.active == "tavily") "Tavily" else "DuckDuckGo"} right now." })
@@ -336,7 +387,7 @@ private fun SearchPage(vm: IrisViewModel, back: () -> Unit) {
 @Composable
 private fun AboutPage(vm: IrisViewModel, back: () -> Unit) {
     val overlays = LocalOverlays.current
-    Page("About", back) {
+    Page("About & updates", back) {
         item {
             Card {
                 CardTitle("I.R.I.S. for Android", "Version ${BuildConfig.VERSION_NAME}. Everything runs on your server; this app only shows it, through the end-to-end encrypted link.")

@@ -4,7 +4,7 @@ import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
-/** What Settings → Voice remembers on this phone (docs/VOICE-PLAN.md). */
+/** What Settings → Voice & calls remembers on this phone (docs/VOICE-PLAN.md). */
 data class VoiceSettings(
     /** What you speak: "" lets the speech service detect it per clip, or "el" / "en". */
     val language: String = "",

@@ -365,7 +365,7 @@ val ABILITY_GROUPS = listOf(
     AbilityGroup("files", "Files", "Read and write files in its own folder on the server.", listOf("files"), false),
     AbilityGroup("computer", "Computer control", "Run PowerShell commands, check updates, install or remove apps, restart.", listOf("shell", "system"), true),
     AbilityGroup("code", "Develop I.R.I.S.", "Read and change the app's own code. Every change shows you the diff and asks first.", listOf("dev"), true),
-    AbilityGroup("connections", "Connections", "Tools from services connected in Settings → Connections (MCP servers).", listOf("mcp"), true),
+    AbilityGroup("connections", "Connections", "Tools from services connected in Settings → Connected services (MCP servers).", listOf("mcp"), true),
 )
 
 const val BUILT_IN_ABILITIES =

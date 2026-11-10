@@ -150,7 +150,7 @@ export interface Balance {
 export interface SearchStatus {
   provider: 'auto' | 'tavily' | 'duckduckgo' | 'deepseek';
   has_tavily_key: boolean;
-  /** A DeepSeek provider with a key exists (Settings → Providers). */
+  /** A DeepSeek provider with a key exists (Settings → AI providers). */
   has_deepseek_key: boolean;
   active: 'deepseek' | 'tavily' | 'duckduckgo';
 }
@@ -366,7 +366,7 @@ export const ABILITY_GROUPS = [
   {
     id: 'connections',
     name: 'Connections',
-    description: 'Tools from services connected in Settings → Connections (MCP servers).',
+    description: 'Tools from services connected in Settings → Connected services (MCP servers).',
     tools: ['mcp'],
     asks: true,
   },

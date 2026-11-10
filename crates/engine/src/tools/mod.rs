@@ -172,7 +172,7 @@ pub const TOOLSETS: &[Toolset] = &[
     Toolset {
         id: "mcp",
         name: "Connections",
-        description: "Tools from services you connect in Settings → Connections (MCP servers). Anything that isn't \
+        description: "Tools from services you connect in Settings → Connected services (MCP servers). Anything that isn't \
                       read-only asks you first, unless you trusted it.",
         // Decided per tool (see `mcp::Hub::needs_approval`).
         needs_approval: false,

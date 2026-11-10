@@ -72,7 +72,7 @@ export interface MenuItem {
 
 export type AutoMode = 'off' | 'careful' | 'full';
 
-export type SettingsTab = 'models' | 'providers' | 'voice' | 'routines' | 'skills' | 'connections' | 'accounts' | 'responses' | 'limits' | 'search' | 'activity' | 'devices' | 'remote' | 'appearance' | 'about';
+export type SettingsTab = 'models' | 'providers' | 'voice' | 'routines' | 'skills' | 'connections' | 'accounts' | 'responses' | 'approvals' | 'limits' | 'search' | 'activity' | 'devices' | 'remote' | 'appearance' | 'about';
 
 export type ConnState = 'starting' | 'online' | 'reconnecting' | 'offline' | 'setup' | 'signin';
 
@@ -449,7 +449,7 @@ class IrisApp {
       this.upsertAgent(await this.api.patchAgent(agentId, { auto_approve: mode !== 'off', auto_full: mode === 'full' }));
       this.toast(
         mode === 'full'
-          ? 'Full auto: only dangerous commands ask you'
+          ? 'Full auto: only catastrophic commands ask you'
           : mode === 'careful'
             ? 'Careful auto: an AI check approves safe commands'
             : 'Auto off: every command asks you first',
@@ -972,7 +972,7 @@ class IrisApp {
     try {
       const status = await api.voice();
       if (!status.available) {
-        this.toast('Add a Groq key in Settings → Providers to make calls');
+        this.toast('Add a Groq key in Settings → AI providers to make calls');
         this.modal = { kind: 'settings', tab: 'voice' };
         return;
       }

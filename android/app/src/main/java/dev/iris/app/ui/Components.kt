@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -54,11 +55,16 @@ import dev.iris.app.link.LinkState
 fun Modifier.press(enabled: Boolean = true, role: Role = Role.Button, onClick: () -> Unit): Modifier = composed {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
-    val k by animateFloatAsState(if (pressed) 1f else 0f, tween(if (pressed) 80 else 220, easing = Motion.ease), label = "press")
+    // Sinks quickly on press and springs back with a small overshoot on release.
+    val k by animateFloatAsState(
+        if (pressed) 1f else 0f,
+        if (pressed) tween(80, easing = Motion.ease) else spring(dampingRatio = 0.45f, stiffness = 600f),
+        label = "press",
+    )
     graphicsLayer {
-        alpha = 1f - 0.22f * k
-        scaleX = 1f - 0.03f * k
-        scaleY = 1f - 0.03f * k
+        alpha = 1f - 0.2f * k.coerceIn(0f, 1f)
+        scaleX = 1f - 0.04f * k
+        scaleY = 1f - 0.04f * k
     }
         .clickable(interactionSource = source, indication = null, enabled = enabled, role = role, onClick = onClick)
 }

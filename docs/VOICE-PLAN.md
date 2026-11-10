@@ -39,7 +39,7 @@
 - **Minimum billing:** each request counts as at least 10 s, so the audio caps give about 720 turns per hour and 2,880 per day. The 2,000 requests/day cap is reached first.
 - **Model:** use **`whisper-large-v3`**, not the turbo version, for better Greek. Whisper large-v3 gets about 11% of words wrong on FLEURS Greek.
 - **Language:** auto-detected per clip, with an optional fixed language in Settings.
-- **Privacy:** voice clips are processed by Groq. Settings → Voice says this plainly.
+- **Privacy:** voice clips are processed by Groq. Settings → Voice & calls says this plainly.
 
 ### What runs on the phone
 
@@ -51,7 +51,7 @@
 
 ## 2. Before any code: what the user does
 
-1. On the server's desktop app, open **Settings → Providers → Groq** and paste the key there. Never paste it in a chat.
+1. On the server's desktop app, open **Settings → AI providers → Groq** and paste the key there. Never paste it in a chat.
    - Leave the **default model and the fallback** on DeepSeek. Groq must not become a chat model.
 2. Try the **mic button in the desktop app's message box** in Greek and English. It already uses Groq, so this checks Greek quality before any phone work starts.
 
@@ -84,17 +84,17 @@ See [DEV.md](DEV.md) for the build, test and emulator workflow.
 
 **Done when:** `cargo test` and the app's type check pass. A message posted with the prefix gets a short, speakable reply. The desktop mic transcribes Greek with `whisper-large-v3`.
 
-### Phase 2: Android, voice API and Settings → Voice
+### Phase 2: Android, voice API and Settings → Voice & calls
 
 **API (`data/IrisApi.kt`, `data/Models.kt`):**
 - `suspend fun voice(): VoiceStatus` → `GET /v1/voice` (`available`, `provider`, `model`).
 - `suspend fun transcribe(data: String, mime: String, language: String = ""): Transcript` → `POST /v1/voice/transcribe` with `{data, mime, language}`, where `data` is base64.
 - These go through the link like every other call. Check that a ~300 KB request body passes through `LinkConnection` (photo uploads already do).
 
-**Settings → Voice page:**
+**Settings → Voice & calls page:**
 - Add `Section("voice", "Voice", Lucide.Mic, "Speech, voices, calls")` to `SECTIONS`, after Notifications, plus a page in `SettingsPages.kt`. Add the `mic` and `phone` icons to `Icons.kt` (Lucide paths, same style).
 - **Card "Speech to text":**
-  - The status from `voice()`: "Groq · whisper-large-v3 · ready". If it's not available: "Add a Groq key on the server (Settings → Providers on the desktop app)".
+  - The status from `voice()`: "Groq · whisper-large-v3 · ready". If it's not available: "Add a Groq key on the server (Settings → AI providers on the desktop app)".
   - One line on privacy: "Your voice clips go through your server to Groq to be turned into text."
   - Free limits in plain words: "Free plan: up to 2,000 spoken turns a day."
   - **Language** chips: Auto (default) / Ελληνικά / English. These pass `language` = "" / "el" / "en".
@@ -114,7 +114,7 @@ See [DEV.md](DEV.md) for the build, test and emulator workflow.
 - `AudioRecord(VOICE_COMMUNICATION, 16000 Hz, mono, PCM 16-bit)`.
 - A function that wraps PCM in a WAV header (`audio/wav`). Groq accepts WAV. Opus would be ~10× smaller but needs more code; leave it for later.
 
-**Done when:** on the phone, Settings → Voice shows Groq ready, Try it transcribes Greek and English correctly, and the voice cards install and test both languages.
+**Done when:** on the phone, Settings → Voice & calls shows Groq ready, Try it transcribes Greek and English correctly, and the voice cards install and test both languages.
 
 ### Phase 3: speaking replies (`data/Speaker.kt`)
 
@@ -130,13 +130,13 @@ See [DEV.md](DEV.md) for the build, test and emulator workflow.
 - **Language per sentence:** Greek letters (`[Ͱ-Ͽἀ-῿]`) → the Greek voice, otherwise the English voice (the user's picks).
 - Write JVM unit tests (`src/test`) for the splitter (Greek `;`, decimals, abbreviations, streaming in small pieces), the language choice and the `[details]` cut-off.
 
-**Done when:** unit tests pass, and Settings → Voice → Test reads a mixed Greek and English paragraph with the right voices.
+**Done when:** unit tests pass, and Settings → Voice & calls → Test reads a mixed Greek and English paragraph with the right voices.
 
 ### Phase 4: the call
 
 **Starting a call:**
 - A phone button in the chat header (every agent). Calling Iris is the main use.
-- If `voice()` says speech isn't available, the button opens Settings → Voice instead.
+- If `voice()` says speech isn't available, the button opens Settings → Voice & calls instead.
 - The first time, ask for `RECORD_AUDIO`.
 
 **`CallService` (foreground service, `foregroundServiceType="microphone"`):**
@@ -206,7 +206,7 @@ See [DEV.md](DEV.md) for the build, test and emulator workflow.
 
 - **Opus instead of WAV** (MediaCodec + `MediaMuxer` OGG, available from API 29): about 10× smaller clips, for slow mobile data.
 - **Backup speech service:** Cloudflare Workers AI `whisper-large-v3-turbo`, free for about 3.5 hours of audio a day on the same Cloudflare account as the relay. The engine would use it when Groq hits its limit.
-- **Offline option:** sherpa-onnx with Parakeet-TDT-0.6B-v3 int8 on the phone, as an optional download in Settings → Voice. Measured 2026-11-08:
+- **Offline option:** sherpa-onnx with Parakeet-TDT-0.6B-v3 int8 on the phone, as an optional download in Settings → Voice & calls. Measured 2026-11-08:
   - Size: 640 MB.
   - RAM: ~690 MB loaded, ~810 MB peak.
   - Speed: 4.8× real time on a 4-core desktop CPU.

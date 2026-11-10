@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Settings → Voice & calls, the same as the phone's Settings → Voice: speech to text (on the
+  // Settings → Voice & calls, the same as the phone's Settings → Voice & calls: speech to text (on the
   // server, with Groq), how many free spoken turns are left today, what you speak, the voices
   // this computer or browser has (with a test that shows it's playing), and how calls behave.
   // Kept in this app or browser, like the phone keeps its own.
@@ -120,7 +120,7 @@
       {:else if status.available}
         <span class="size-1.5 rounded-full bg-success"></span><span class="text-success">{status.provider} · {status.model} · ready</span>
       {:else}
-        <span class="size-1.5 rounded-full bg-warn"></span><span class="text-warn">Add a Groq key in Settings → Providers (free at console.groq.com)</span>
+        <span class="size-1.5 rounded-full bg-warn"></span><span class="text-warn">Add a Groq key in Settings → AI providers (free at console.groq.com)</span>
       {/if}
     </div>
     {#if status?.available}

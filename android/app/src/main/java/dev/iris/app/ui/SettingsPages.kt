@@ -259,12 +259,12 @@ private fun ConnectionsPage(vm: IrisViewModel, back: () -> Unit) {
     var servers by remember { mutableStateOf<List<McpServer>?>(null) }
     var busy by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { vm.attempt { mcp() }?.let { servers = it } }
-    Page("Connections", back) {
+    Page("Connected services", back) {
         item { Hint("Services agents can use through MCP. Iris and agents with the Connections ability get their tools; calls that change something ask you first. Add or edit them on the server.") }
         val list = servers
         when {
             list == null -> item { Loading() }
-            list.isEmpty() -> item { Empty("Nothing connected yet. Add services in Settings → Connections on the server.") }
+            list.isEmpty() -> item { Empty("Nothing connected yet. Add services in Settings → Connected services on the server.") }
             else -> {
                 items(list, key = { it.name }) { s ->
                     Card {
@@ -305,7 +305,7 @@ private fun ConnectionsPage(vm: IrisViewModel, back: () -> Unit) {
 private fun ActivityPage(vm: IrisViewModel, back: () -> Unit) {
     var log by remember { mutableStateOf<List<ToolLogEntry>?>(null) }
     LaunchedEffect(Unit) { log = vm.attempt { audit(150) }.orEmpty() }
-    Page("Activity", back, subtitle = "The latest tool use, newest first") {
+    Page("Activity log", back, subtitle = "The latest tool use, newest first") {
         val list = log
         when {
             list == null -> item { Loading() }
@@ -343,7 +343,7 @@ private fun DevicesPage(vm: IrisViewModel, back: () -> Unit) {
     var devices by remember { mutableStateOf<List<Device>?>(null) }
     suspend fun load() { vm.attempt { devices() }?.let { devices = it } }
     LaunchedEffect(Unit) { load() }
-    Page("Devices", back) {
+    Page("Paired devices", back) {
         item { Hint("Everything that can reach your agents. Remove a lost phone or an old browser here: it's signed out right away.") }
         val list = devices
         if (list == null) item { Loading() } else items(list, key = { it.id }) { d ->
@@ -441,7 +441,7 @@ private fun RemotePage(vm: IrisViewModel, back: () -> Unit) {
 @Composable
 private fun ProvidersPage(vm: IrisViewModel, back: () -> Unit) {
     LaunchedEffect(Unit) { vm.loadModelSettings() }
-    Page("Providers", back) {
+    Page("AI providers", back) {
         item { Hint("API keys never leave the server, so providers are added and changed there. The default model is picked in Models.") }
         items(vm.providers.toList(), key = { it.id }) { p ->
             Card {
@@ -462,7 +462,7 @@ private fun ProvidersPage(vm: IrisViewModel, back: () -> Unit) {
 private fun AccountsPage(vm: IrisViewModel, back: () -> Unit) {
     var accounts by remember { mutableStateOf<List<VaultAccount>?>(null) }
     LaunchedEffect(Unit) { accounts = vm.attempt { vault() }.orEmpty() }
-    Page("Accounts", back) {
+    Page("Saved logins", back) {
         item { Hint("Logins agents may use in their browser, only on that account's own site. Passwords stay encrypted on the server and never reach this phone; add or change them there.") }
         val list = accounts
         when {
