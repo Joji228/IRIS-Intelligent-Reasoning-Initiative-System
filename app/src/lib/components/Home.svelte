@@ -115,7 +115,7 @@
               class="mt-1 text-faint opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-100"
             />
           </div>
-          <p class="mt-3 line-clamp-2 min-h-[2.6em] text-[13px] leading-snug text-muted">
+          <p class="mt-3 line-clamp-2 min-h-[2.6em] text-[13px] leading-snug text-muted" title={agent.description || undefined}>
             {agent.description || 'No description yet.'}
           </p>
           <div class="mt-3 flex items-center justify-between border-t border-line pt-3 text-[11.5px] text-faint">

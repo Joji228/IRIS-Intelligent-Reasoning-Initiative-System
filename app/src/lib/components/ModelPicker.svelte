@@ -7,7 +7,8 @@
   import { app } from '../app.svelte';
   import { modelVersion } from '../format';
   import { tip } from '../tooltip';
-  import { REASONING_LEVELS, reasoningLabel, type Agent } from '../types';
+  import { reasoningLabel, type Agent } from '../types';
+  import EffortSlider from './EffortSlider.svelte';
 
   // `below`: the menu opens downward (the picker sits in the chat header).
   let { agent, disabled = false, below = false }: { agent: Agent; disabled?: boolean; below?: boolean } = $props();
@@ -30,7 +31,6 @@
       .filter((g) => g.models.length),
   );
   const label = $derived(current ? (modelVersion(current.model) ?? current.model) : 'No model');
-  const efforts = [{ id: '', label: 'Auto' }, ...REASONING_LEVELS];
 
   $effect(() => {
     if (app.providers.length && Object.keys(app.modelOptions).length === 0) void app.loadModelOptions();
@@ -117,22 +117,16 @@
       <div class="px-2.5 pb-1.5 text-[11px] font-semibold tracking-wider text-faint uppercase">
         Thinking effort {ownReasoning ? `· ${agent.name} only` : '· all agents'}
       </div>
-      <div class="grid grid-cols-3 gap-1 px-1.5 pb-1.5">
-        {#each efforts as level (level.id)}
-          <button
-            class="rounded-lg border px-2 py-1.5 text-[12px] transition {effort === level.id
-              ? 'border-accent/60 bg-accent-soft text-text'
-              : 'border-line text-muted hover:bg-hover hover:text-text'}"
-            onclick={() => pickEffort(level.id)}>{level.label}</button
-          >
-        {/each}
+      <!-- An agent with its own level: the pill goes back to the default; otherwise it's the model's Auto -->
+      <div class="px-1.5 pt-0.5 pb-2">
+        <EffortSlider
+          value={effort}
+          onchange={pickEffort}
+          autoLabel={ownReasoning ? 'Default' : 'Auto'}
+          autoHint={ownReasoning ? `Like all agents (${reasoningLabel(app.reasoningDefault)})` : 'The model decides'}
+          autoLevel={app.reasoningDefault}
+        />
       </div>
-      {#if ownReasoning}
-        <button
-          class="mx-1.5 mb-1.5 w-[calc(100%-0.75rem)] rounded-lg py-1.5 text-[12px] text-accent-hi hover:bg-hover"
-          onclick={() => pickEffort('')}>Use the default effort ({reasoningLabel(app.reasoningDefault)})</button
-        >
-      {/if}
     </div>
   {/if}
 </div>

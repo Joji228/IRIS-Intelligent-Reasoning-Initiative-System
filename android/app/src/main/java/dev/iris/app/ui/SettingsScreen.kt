@@ -26,7 +26,6 @@ import dev.iris.app.data.Fallback
 import dev.iris.app.data.IrisViewModel
 import dev.iris.app.data.Limits
 import dev.iris.app.data.MemoryText
-import dev.iris.app.data.REASONING_LEVELS
 import dev.iris.app.data.ResponseStyle
 import dev.iris.app.data.Screen
 import dev.iris.app.data.SearchStatus
@@ -46,7 +45,7 @@ private val GROUPS = listOf(
     "Assistant" to listOf(
         Section("models", "Models", Lucide.Cpu, "Default, reasoning, fallback"),
         Section("providers", "AI providers", Lucide.Server, "AI services and their keys"),
-        Section("responses", "Personality & memory", Lucide.MessageText, "Tone, and what they know about you"),
+        Section("responses", "Personality & memory", Lucide.MessageText, "Tone and what they know of you"),
         Section("voice", "Voice & calls", Lucide.Mic, "Speech, voices, calls"),
         Section("search", "Web search", Lucide.Search, "Which search engine agents use"),
     ),
@@ -145,11 +144,11 @@ private fun ModelsPage(vm: IrisViewModel, back: () -> Unit) {
                 })
                 Divider()
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Label("Reasoning effort")
-                    Chips(listOf("" to "Auto") + REASONING_LEVELS, reasoning) { level ->
+                    Label("Thinking effort")
+                    EffortSlider(reasoning ?: vm.reasoningDefault, { level ->
                         reasoning = level
                         scope.launch { vm.attempt { putReasoning(level) }?.let { reasoning = it.effort; vm.reasoningDefault = it.effort } }
-                    }
+                    })
                     Hint("How hard all agents think, including Iris. Higher levels answer more carefully but are slower and use more tokens.")
                 }
             }
@@ -222,7 +221,7 @@ private fun ApprovalsPage(vm: IrisViewModel, back: () -> Unit) {
                     val own = if (!a.autoApprove) "off" else if (a.autoFull) "full" else "careful"
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Orb(a, 30.dp)
-                        Txt(a.name, 15.sp, C.text, FontWeight.Medium, Modifier.weight(1f), maxLines = 1)
+                        Txt(a.name, 15.sp, C.text, FontWeight.Medium, Modifier.weight(1f), maxLines = 2)
                         Segmented(listOf("off" to "Ask", "careful" to "Careful", "full" to "Full"), own) { mode ->
                             if (mode != own) vm.patchAgent(
                                 a.id,

@@ -156,7 +156,7 @@ fun HomeScreen(vm: IrisViewModel) {
                     ) { Icon(Lucide.Plus, C.muted, 20.dp) }
                     Column(Modifier.weight(1f)) {
                         Txt("New agent", 15.sp, C.muted, FontWeight.Medium)
-                        Txt("${agents.size} of $MAX_AGENTS · becomes a specialist from its first message", 12.5.sp, C.faint, maxLines = 1)
+                        Txt("${agents.size} of $MAX_AGENTS · learns from your first message", 12.5.sp, C.faint, maxLines = 1)
                     }
                 }
             }

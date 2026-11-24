@@ -42,9 +42,10 @@
   import { modelName, modelVersion } from '../format';
   import { clockTime, relativeTime } from '../time';
   import { tip } from '../tooltip';
-  import { REASONING_LEVELS, type Device, type LinkStatus, type Pairing, type Limits, type Provider, type ResponseStyle, type Routine, type SearchStatus, type Skill, type McpServer, type VaultAccount, type ToolLogEntry } from '../types';
+  import { type Device, type LinkStatus, type Pairing, type Limits, type Provider, type ResponseStyle, type Routine, type SearchStatus, type Skill, type McpServer, type VaultAccount, type ToolLogEntry } from '../types';
   import AgentAvatar from './AgentAvatar.svelte';
   import VoiceSettings from './VoiceSettings.svelte';
+  import EffortSlider from './EffortSlider.svelte';
   import Modal from './Modal.svelte';
   import Select from './Select.svelte';
   import UsageBar from './UsageBar.svelte';
@@ -886,17 +887,10 @@
             {/if}
 
             <!-- Reasoning effort: how hard every agent thinks unless it has its own level -->
-            <div class="mt-4 flex flex-wrap items-end gap-x-4 gap-y-2 border-t border-accent/20 pt-4">
-              <div class="w-full shrink-0 sm:w-56">
-                <label class="label" for="dr-level">Reasoning effort</label>
-                <Select
-                  id="dr-level"
-                  value={app.reasoningDefault}
-                  options={[{ value: '', label: 'Auto · the model decides' }, ...REASONING_LEVELS.map((l) => ({ value: l.id as string, label: l.label }))]}
-                  onchange={(v) => app.setReasoningDefault(v)}
-                />
-              </div>
-              <p class="hint">
+            <div class="mt-4 border-t border-accent/20 pt-4">
+              <div class="label">Thinking effort</div>
+              <div class="max-w-md"><EffortSlider value={app.reasoningDefault} onchange={(v) => app.setReasoningDefault(v)} /></div>
+              <p class="hint mt-2">
                 How hard all agents think, including Iris. Agents can change their own level from the chat box. Higher
                 levels answer more carefully but are slower and use more tokens.
               </p>
@@ -1033,7 +1027,7 @@
                         <KeyRound size={11} />{keyLabel(p)}
                       </span>
                     </div>
-                    <div class="mt-0.5 truncate font-mono text-[12px] text-faint">{p.base_url} · {p.default_model}</div>
+                    <div class="mt-0.5 truncate font-mono text-[12px] text-faint max-sm:break-all max-sm:whitespace-normal" title="{p.base_url} · {p.default_model}">{p.base_url} · {p.default_model}</div>
                   </div>
                   <button class="btn-outline px-3! py-1.5! text-[12.5px]!" onclick={() => testProvider(p.id)}>Test</button>
                   <button class="btn-ghost px-2.5!" onclick={() => editProvider(p)} aria-label="Edit"><Pencil size={14} /></button>
@@ -1710,10 +1704,15 @@
                 }}
               >
                 <AgentAvatar {agent} size={22} />
-                <span class="min-w-0 flex-1 truncate text-muted">{e.summary}</span>
-                <span class="shrink-0 rounded-full px-2 py-0.5 text-[11px] {chipFor(e).style}">{chipFor(e).label}</span>
-                <span class="w-12 shrink-0 text-right text-[11px] text-faint">{(e.duration_ms / 1000).toFixed(1)}s</span>
-                <span class="w-16 shrink-0 text-right text-[11px] text-faint">{clockTime(e.started_at)}</span>
+                <!-- One line on wide windows; on phones the step gets its own two lines, details below -->
+                <span class="min-w-0 flex-1 sm:flex sm:items-center sm:gap-3">
+                  <span class="block text-muted max-sm:line-clamp-2 sm:min-w-0 sm:flex-1 sm:truncate" title={e.summary}>{e.summary}</span>
+                  <span class="flex shrink-0 items-center gap-2 max-sm:mt-1 sm:gap-3">
+                    <span class="rounded-full px-2 py-0.5 text-[11px] {chipFor(e).style}">{chipFor(e).label}</span>
+                    <span class="text-[11px] text-faint sm:w-12 sm:text-right">{(e.duration_ms / 1000).toFixed(1)}s</span>
+                    <span class="text-[11px] text-faint sm:w-16 sm:text-right">{clockTime(e.started_at)}</span>
+                  </span>
+                </span>
               </button>
             {/each}
           </div>

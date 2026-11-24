@@ -86,7 +86,6 @@ import dev.iris.app.data.Conn
 import dev.iris.app.data.IrisViewModel
 import dev.iris.app.data.OrbState
 import dev.iris.app.data.Prefixes
-import dev.iris.app.data.REASONING_LEVELS
 import dev.iris.app.data.modelName
 import dev.iris.app.data.orbState
 import dev.iris.app.data.phrases
@@ -246,11 +245,13 @@ private fun modelSheet(vm: IrisViewModel, overlays: Overlays, agent: Agent) = ov
                 else if (start.isNotEmpty()) choose(start)
             },
         )
-        Label("Thinking")
-        Chips(listOf("" to "Auto") + REASONING_LEVELS, a.reasoningEffort) { level ->
+        Label("Thinking effort")
+        // "" here means this agent follows the default level, hence "Default" on the pill.
+        EffortSlider(a.reasoningEffort, { level ->
             vm.patchAgent(a.id, buildJsonObject { put("reasoning_effort", level) })
-        }
-        Hint("Higher levels answer more carefully, but are slower and use more tokens. Auto follows Settings → Models.")
+        }, autoLabel = "Default", autoLevel = vm.reasoningDefault,
+            autoHint = "Like all agents" + vm.reasoningDefault.takeIf { it.isNotEmpty() }?.let { " (${reasoningLabel(it)})" }.orEmpty())
+        Hint("Higher levels answer more carefully, but are slower and use more tokens. Default follows Settings → Models.")
         Spacer(Modifier.height(4.dp))
     }
 }

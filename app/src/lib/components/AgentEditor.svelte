@@ -2,6 +2,7 @@
   import { Cpu, LoaderCircle, ShieldAlert } from '@lucide/svelte';
   import { untrack } from 'svelte';
   import { app } from '../app.svelte';
+  import { modelVersion } from '../format';
   import { ABILITY_GROUPS, BUILT_IN_ABILITIES } from '../types';
   import { colorChoices, nextColor, templates, type Template } from '../templates';
   import AgentAvatar from './AgentAvatar.svelte';
@@ -168,12 +169,13 @@
         <Cpu size={16} class="shrink-0 text-accent-hi" />
         <span class="text-[13px] font-medium">Model</span>
       </div>
-      <div class="mt-2.5 flex gap-2">
+      <div class="mt-2.5 flex gap-2 max-sm:flex-col">
+        <!-- Full width while it follows the default (no model box beside it) -->
         <Select
-          class="w-56! shrink-0"
+          class="{provider ? 'w-56!' : 'w-full!'} shrink-0 max-sm:w-full!"
           label="Provider"
           bind:value={provider}
-          options={[{ value: '', label: `Default · ${app.modelLabel()}` }, ...app.chatProviders.map((p) => ({ value: p.id, label: p.name }))]}
+          options={[{ value: '', label: `Default · ${app.defaultModel ? (modelVersion(app.defaultModel.model) ?? app.defaultModel.model) : 'no model'}` }, ...app.chatProviders.map((p) => ({ value: p.id, label: p.name }))]}
           onchange={() => {
             model = '';
             models = [];

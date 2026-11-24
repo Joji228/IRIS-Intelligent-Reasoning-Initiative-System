@@ -105,8 +105,8 @@ private fun RoutinesPage(vm: IrisViewModel, back: () -> Unit) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Orb(agent, 30.dp)
                         Column(Modifier.weight(1f)) {
-                            Txt(r.name, 15.sp, C.text, FontWeight.SemiBold, maxLines = 1)
-                            Txt("${agent?.name ?: "?"} · ${r.schedule}", 12.5.sp, C.faint, mono = false, maxLines = 1)
+                            Txt(r.name, 15.sp, C.text, FontWeight.SemiBold, maxLines = 2)
+                            Txt("${agent?.name ?: "?"} · ${r.schedule}", 12.5.sp, C.faint, mono = false, maxLines = 2)
                         }
                         Switch(r.enabled, { on ->
                             routines = list.map { if (it.id == r.id) it.copy(enabled = on) else it }
@@ -362,7 +362,7 @@ private fun DevicesPage(vm: IrisViewModel, back: () -> Unit) {
                             if (me) Badge("This phone", C.accentHi)
                             if (d.local) Badge("The server", C.faint)
                         }
-                        Txt("Added ${when_(d.createdAt)} · seen ${d.lastSeenAt?.let { relativeTime(it) } ?: "never"}", 12.sp, C.faint, maxLines = 1)
+                        Txt("Added ${when_(d.createdAt)} · seen ${d.lastSeenAt?.let { relativeTime(it) } ?: "never"}", 12.sp, C.faint, maxLines = 2)
                     }
                     if (!d.local) {
                         IconButton(Lucide.Trash, {
@@ -453,7 +453,7 @@ private fun ProvidersPage(vm: IrisViewModel, back: () -> Unit) {
                     if (p.voiceOnly) Badge("Speech to text only", C.muted)
                     Badge(if (p.hasKey) "Key saved" else "No key", if (p.hasKey) C.success else C.warn)
                 }
-                Txt(p.baseUrl, 12.sp, C.faint, mono = true, maxLines = 1)
+                Txt(p.baseUrl, 12.sp, C.faint, mono = true, maxLines = 2)
                 if (p.defaultModel.isNotEmpty()) Txt("Model: ${p.defaultModel}", 12.5.sp, C.muted)
             }
         }
@@ -476,7 +476,7 @@ private fun AccountsPage(vm: IrisViewModel, back: () -> Unit) {
                         Txt(a.name, 15.sp, C.text, FontWeight.SemiBold, modifier = Modifier.weight(1f))
                         Badge(if (a.hasPassword) "Password saved" else "No password", if (a.hasPassword) C.success else C.warn)
                     }
-                    Txt("${a.username} · ${a.site}", 12.5.sp, C.muted, maxLines = 1)
+                    Txt("${a.username} · ${a.site}", 12.5.sp, C.muted, maxLines = 2)
                 }
             }
         }
