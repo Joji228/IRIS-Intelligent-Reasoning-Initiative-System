@@ -1,6 +1,7 @@
 <script lang="ts">
   import {
     Activity,
+    Sparkles,
     ChevronLeft,
     ChevronRight,
     Mic,
@@ -42,10 +43,11 @@
   import { modelName, modelVersion } from '../format';
   import { clockTime, relativeTime } from '../time';
   import { tip } from '../tooltip';
-  import { type Device, type LinkStatus, type Pairing, type Limits, type Provider, type ResponseStyle, type Routine, type SearchStatus, type Skill, type McpServer, type VaultAccount, type ToolLogEntry } from '../types';
+  import { type Device, type UpdateStatus, type LinkStatus, type Pairing, type Limits, type Provider, type ResponseStyle, type Routine, type SearchStatus, type Skill, type McpServer, type VaultAccount, type ToolLogEntry } from '../types';
   import AgentAvatar from './AgentAvatar.svelte';
   import VoiceSettings from './VoiceSettings.svelte';
   import EffortSlider from './EffortSlider.svelte';
+  import Markdown from './Markdown.svelte';
   import Modal from './Modal.svelte';
   import Select from './Select.svelte';
   import UsageBar from './UsageBar.svelte';
@@ -813,6 +815,27 @@
     if (tab === 'activity') void loadAudit();
   });
 </script>
+
+{#snippet whatsNew(rel: NonNullable<UpdateStatus['latest']>, sub: string)}
+  <!-- What's new: the release notes rendered, under our own heading -->
+  <div class="overflow-hidden rounded-2xl border border-accent/30 bg-accent-soft/30">
+    <div class="flex items-center gap-2.5 border-b border-accent/20 px-4 py-3">
+      <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-hi"><Sparkles size={16} /></span>
+      <div class="min-w-0 flex-1">
+        <div class="text-[14px] font-semibold">What's new in {rel.version}</div>
+        <div class="text-[12px] text-faint">
+          {sub}{rel.published_at ? ` · released ${relativeTime(Date.parse(rel.published_at))}` : ''}
+        </div>
+      </div>
+      <a class="shrink-0 text-[12px] text-accent-hi hover:underline" href={rel.page} target="_blank" rel="noreferrer">On GitHub</a>
+    </div>
+    {#if rel.notes}
+      <div class="release-notes max-h-80 overflow-y-auto px-4 py-3 text-[13px] scroll-thin">
+        <Markdown text={rel.notes.replace(/^\s*#{1,3}\s*What's new\s*\n/i, '')} />
+      </div>
+    {/if}
+  </div>
+{/snippet}
 
 <Modal title="Settings" onclose={() => (app.modal = null)} width={820}>
   <!-- A fixed height, so the window doesn't jump when switching tabs -->
@@ -1919,14 +1942,9 @@
         <h3 class="mt-8 text-[13px] font-semibold">Updates</h3>
         {#if app.update}
           {@const u = app.update}
-          <div class="mt-2 max-w-md space-y-3 text-[13px]">
+          <div class="mt-2 max-w-xl space-y-3 text-[13px]">
             {#if u.available && u.latest}
-              <p>
-                <span class="font-medium">I.R.I.S. {u.latest.version}</span> is available (you have {u.current}).
-              </p>
-              {#if u.latest.notes}
-                <p class="max-h-40 overflow-y-auto whitespace-pre-wrap rounded-lg bg-surface p-3 text-[12px] text-muted">{u.latest.notes}</p>
-              {/if}
+              {@render whatsNew(u.latest, `You have ${u.current}`)}
               {#if u.latest.windows && u.latest.windows.sha256}
                 <button
                   class="btn-primary"
@@ -1953,6 +1971,7 @@
               <p class="text-faint">Couldn't check for updates: {u.error}</p>
             {:else}
               <p>You have the newest version ({u.current}).</p>
+              {#if u.latest?.notes && u.latest.version === u.current}{@render whatsNew(u.latest, 'Installed')}{/if}
             {/if}
             {#if u.install.phase === 'failed'}
               <p class="text-danger">The last update didn't work: {u.install.error}</p>

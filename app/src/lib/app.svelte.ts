@@ -674,7 +674,9 @@ class IrisApp {
   async refreshAll() {
     const api = this.api;
     if (!api) return;
-    void this.checkUpdate();
+    // Opening or refreshing the app looks on GitHub right away (the engine
+    // allows one fresh look a minute); after that, the hourly check uses its cache.
+    void this.checkUpdate(true);
     this.updateTimer ??= setInterval(() => void this.checkUpdate(), 60 * 60 * 1000);
     try {
       const [agents, providers, status, recent, approvals, toolsets, defaultModel, reasoning] = await Promise.all([

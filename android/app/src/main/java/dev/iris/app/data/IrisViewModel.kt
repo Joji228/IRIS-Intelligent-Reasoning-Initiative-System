@@ -408,7 +408,8 @@ class IrisViewModel(app: Application) : AndroidViewModel(app) {
             refreshBalance()
             refreshPreviews()
             loadProblems()
-            checkUpdate()
+            // Opening the app looks on GitHub right away (the server allows one fresh look a minute).
+            checkUpdate(refresh = true)
             pendingOpen?.let { id -> pendingOpen = null; if (agents.any { it.id == id }) openAgent(id) }
             chatAgentId?.let { id -> if (agents.none { it.id == id }) goHome() else loadChat(id) }
         } catch (e: Exception) {

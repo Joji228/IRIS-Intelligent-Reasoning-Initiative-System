@@ -3,6 +3,9 @@ package dev.iris.app.ui
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -401,7 +404,12 @@ private fun AboutPage(vm: IrisViewModel, back: () -> Unit) {
                 if (offer != null) {
                     val (release, _) = offer
                     CardTitle("Version ${release.version} is out", "You have ${BuildConfig.VERSION_NAME}. The update is downloaded from GitHub, checked against its checksum, and then Android asks you to confirm the install. Your chats and pairing stay.")
-                    if (release.notes.isNotBlank()) Txt(release.notes, 12.5.sp, C.muted)
+                    if (release.notes.isNotBlank()) {
+                        // What's new, rendered (the notes' own "What's new" heading is dropped).
+                        Box(Modifier.fillMaxWidth().background(C.accentSoft.copy(alpha = 0.35f), RoundedCornerShape(14.dp)).padding(12.dp)) {
+                            Markdown(release.notes.replace(Regex("^\\s*#{1,3}\\s*What's new\\s*\\n", RegexOption.IGNORE_CASE), ""), color = C.muted, size = 13.5f)
+                        }
+                    }
                     Button(
                         if (progress != null) "Downloading… $progress%" else "Download and install",
                         { vm.installUpdate() },

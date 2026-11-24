@@ -32,6 +32,9 @@ use crate::api::AppState;
 const REPO: &str = "Joji228/IRIS-Intelligent-Reasoning-Initiative-System";
 /// How long an answer from GitHub is reused.
 const CACHE_FOR: Duration = Duration::from_secs(30 * 60);
+/// A forced look (the app opening, "Check now") still reuses an answer this fresh,
+/// so refreshing the app over and over doesn't run into GitHub's rate limit.
+const MIN_FORCED: Duration = Duration::from_secs(60);
 /// Background checks happen this often (when automatic checks are on).
 const CHECK_EVERY: Duration = Duration::from_secs(6 * 60 * 60);
 /// No installer is anywhere near this; anything bigger is refused.
@@ -175,11 +178,10 @@ fn last_update(data_dir: &Path) -> Option<Value> {
 
 /// Asks GitHub (or reuses a recent answer, unless `force`) and describes where things stand.
 pub async fn status(st: &AppState, force: bool) -> Status {
-    let fresh = {
-        let cache = CACHE.lock().unwrap();
-        cache.as_ref().is_some_and(|c| c.at.elapsed() < CACHE_FOR)
-    };
-    if force || !fresh {
+    let age = CACHE.lock().unwrap().as_ref().map(|c| c.at.elapsed());
+    let fresh = age.is_some_and(|a| a < CACHE_FOR);
+    let very_fresh = age.is_some_and(|a| a < MIN_FORCED);
+    if (force && !very_fresh) || !fresh {
         let result = fetch_latest(&st.http).await;
         *CACHE.lock().unwrap() = Some(Checked { at: Instant::now(), at_ms: iris_core::now_ms(), result });
     }
