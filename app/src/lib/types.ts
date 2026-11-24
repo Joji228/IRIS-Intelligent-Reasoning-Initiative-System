@@ -35,6 +35,37 @@ export interface Limits {
   used_this_week: number;
 }
 
+/** One day of usage (Settings → Usage). */
+export interface UsageDay {
+  /** Local date, YYYY-MM-DD. */
+  day: string;
+  tokens: number;
+  input: number;
+  /** Input served from the provider's cache (where it's reported). */
+  cached: number;
+  output: number;
+  /** USD. */
+  cost: number;
+  /** Part of the cost is estimated (older rows without the cache split). */
+  estimated: boolean;
+  /** Tokens on models without a known price (not in `cost`). */
+  unpriced: number;
+}
+
+export interface UsageDaily {
+  days: UsageDay[];
+  currency: string;
+  cache_rate: number;
+  prices: { model: string; cached: number; input: number; output: number } | null;
+}
+
+/** When chats compact (tokens of context): other agents, Iris, and the choices. */
+export interface Compaction {
+  other: number;
+  main: number;
+  steps: number[];
+}
+
 /** Short-lived expressions of an orb. */
 export type Mood = 'happy' | 'sad' | 'spawn' | 'spin';
 

@@ -123,6 +123,12 @@ class IrisViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var defaultModel by mutableStateOf<DefaultModel?>(null)
         private set
+    /** When chats compact (Settings → Models); null until loaded. */
+    var compaction by mutableStateOf<Compaction?>(null)
+    /** Settings → Usage: "tokens", "money" or "both", remembered on this phone. */
+    var usageMode: String
+        get() = getApplication<Application>().getSharedPreferences("iris-ui", android.content.Context.MODE_PRIVATE).getString("usage_mode", "both") ?: "both"
+        set(v) { getApplication<Application>().getSharedPreferences("iris-ui", android.content.Context.MODE_PRIVATE).edit().putString("usage_mode", v).apply() }
     /** How hard agents without their own level think ("" until loaded). */
     var reasoningDefault by mutableStateOf("")
     val providers = mutableStateListOf<Provider>()

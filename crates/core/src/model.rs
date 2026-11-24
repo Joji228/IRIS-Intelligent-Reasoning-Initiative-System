@@ -299,6 +299,19 @@ pub enum ToolStatus {
     Cancelled,
 }
 
+/// One row of the usage ledger (a reply, or tokens spent outside one).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct UsageRow {
+    pub created_at: i64,
+    pub tokens: i64,
+    /// Input tokens, including the cached part; 0 for very old rows.
+    pub input: i64,
+    /// The part of the input served from the provider's cache; -1 = unknown.
+    pub cached: i64,
+    pub output: i64,
+    pub model: String,
+}
+
 /// The final state of an assistant reply, written once streaming ends.
 #[derive(Debug, Clone)]
 pub struct MessageResult {

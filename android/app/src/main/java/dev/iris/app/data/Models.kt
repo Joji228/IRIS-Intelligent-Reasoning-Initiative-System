@@ -237,6 +237,34 @@ data class Fallback(val enabled: Boolean = false, val provider: String = "", val
 @Serializable
 data class Reasoning(val effort: String = "")
 
+/** One day of usage (Settings → Usage & limits). */
+@Serializable
+data class UsageDay(
+    val day: String = "",
+    val tokens: Long = 0,
+    val input: Long = 0,
+    val cached: Long = 0,
+    val output: Long = 0,
+    val cost: Double = 0.0,
+    val estimated: Boolean = false,
+    val unpriced: Long = 0,
+)
+
+@Serializable
+data class UsagePrices(val model: String = "", val cached: Double = 0.0, val input: Double = 0.0, val output: Double = 0.0)
+
+@Serializable
+data class UsageDaily(
+    val days: List<UsageDay> = emptyList(),
+    val currency: String = "USD",
+    val cacheRate: Double = 0.0,
+    val prices: UsagePrices? = null,
+)
+
+/** When chats compact (tokens of context): other agents, Iris, and the choices. */
+@Serializable
+data class Compaction(val other: Long = 64_000, val main: Long = 256_000, val steps: List<Long> = emptyList())
+
 @Serializable
 data class AutoDefault(val mode: String = "off")
 

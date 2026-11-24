@@ -43,6 +43,7 @@ import {
   type RunInfo,
   type Thread,
   type Toolset,
+  type Compaction,
 } from './types';
 
 export type View =
@@ -165,6 +166,8 @@ class IrisApp {
   balancePaused = $state(false);
   /** Daily / weekly token caps and today's / this week's usage. */
   limits = $state<Limits | null>(null);
+  /** When chats compact (Settings → Models); null until loaded. */
+  compaction = $state<Compaction | null>(null);
   /** Short-lived orb expressions (happy after a task, sad after a failure...). */
   moods = $state<Record<string, Mood>>({});
   private moodTimers: Record<string, ReturnType<typeof setTimeout>> = {};
@@ -372,6 +375,36 @@ class IrisApp {
     } finally {
       this.balanceLoading = false;
     }
+  }
+
+  async loadCompaction() {
+    if (!this.api) return;
+    try {
+      this.compaction = await this.api.compaction();
+    } catch {
+      // An older engine: the ring falls back to the old fixed point.
+    }
+  }
+
+  async setCompaction(other: number, main: number) {
+    if (!this.api) return;
+    try {
+      this.compaction = await this.api.putCompaction(other, main);
+      this.toast('Saved: chats compact at the new point');
+    } catch (e) {
+      this.error(e);
+    }
+  }
+
+  /** Where this agent's chat compacts by itself (tokens of context). */
+  compactAtFor(agent: Agent | undefined, window: number | null): number {
+    const chosen = this.compaction
+      ? agent?.role === 'main'
+        ? this.compaction.main
+        : this.compaction.other
+      : 64_000;
+    const w = window ?? 32_000;
+    return Math.min(chosen, w >= 256_000 ? w * 0.85 : w * 0.6);
   }
 
   async refreshLimits() {
@@ -677,6 +710,7 @@ class IrisApp {
     // Opening or refreshing the app looks on GitHub right away (the engine
     // allows one fresh look a minute); after that, the hourly check uses its cache.
     void this.checkUpdate(true);
+    void this.loadCompaction();
     this.updateTimer ??= setInterval(() => void this.checkUpdate(), 60 * 60 * 1000);
     try {
       const [agents, providers, status, recent, approvals, toolsets, defaultModel, reasoning] = await Promise.all([
@@ -799,7 +833,7 @@ class IrisApp {
         { label: 'Open chat', icon: MessageSquare, action: () => this.openAgent(agent.id) },
         { label: 'Edit agent', icon: Pencil, action: () => (this.modal = { kind: 'agent', agentId: agent.id }) },
         {
-          label: 'Compacting',
+          label: 'Compact the chat',
           icon: Archive,
           info: 'Shrinks the chat: older messages become a short summary, so the agent still remembers them while using less of its memory (context).',
           disabled: busy,

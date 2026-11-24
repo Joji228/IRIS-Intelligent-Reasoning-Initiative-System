@@ -28,6 +28,7 @@ mod system;
 mod team;
 mod tools;
 mod update;
+mod usage;
 mod voice;
 mod vault;
 

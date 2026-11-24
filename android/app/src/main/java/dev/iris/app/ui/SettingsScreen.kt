@@ -13,6 +13,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,6 +29,7 @@ import dev.iris.app.BuildConfig
 import dev.iris.app.data.Fallback
 import dev.iris.app.data.IrisViewModel
 import dev.iris.app.data.Limits
+import dev.iris.app.data.UsageDaily
 import dev.iris.app.data.MemoryText
 import dev.iris.app.data.ResponseStyle
 import dev.iris.app.data.Screen
@@ -46,7 +48,7 @@ private data class Section(val id: String, val title: String, val icon: androidx
 
 private val GROUPS = listOf(
     "Assistant" to listOf(
-        Section("models", "Models", Lucide.Cpu, "Default, reasoning, fallback"),
+        Section("models", "Models", Lucide.Cpu, "Default, thinking, chat length, fallback"),
         Section("providers", "AI providers", Lucide.Server, "AI services and their keys"),
         Section("responses", "Personality & memory", Lucide.MessageText, "Tone and what they know of you"),
         Section("voice", "Voice & calls", Lucide.Mic, "Speech, voices, calls"),
@@ -58,9 +60,9 @@ private val GROUPS = listOf(
         Section("connections", "Connected services", Lucide.Plug, "Email, issues and more (MCP)"),
         Section("accounts", "Saved logins", Lucide.KeyRound, "Website logins agents may use"),
     ),
-    "Safety" to listOf(
+    "Safety & usage" to listOf(
         Section("approvals", "Approvals", Lucide.ShieldCheck, "When agents act on their own"),
-        Section("limits", "Usage limits", Lucide.Gauge, "Daily and weekly token caps"),
+        Section("limits", "Usage & limits", Lucide.Gauge, "Tokens and cost per day, caps"),
         Section("activity", "Activity log", Lucide.Activity, "Every tool the agents used"),
     ),
     "Devices" to listOf(
@@ -153,6 +155,33 @@ private fun ModelsPage(vm: IrisViewModel, back: () -> Unit) {
                         scope.launch { vm.attempt { putReasoning(level) }?.let { reasoning = it.effort; vm.reasoningDefault = it.effort } }
                     })
                     Hint("How hard all agents think, including Iris. Higher levels answer more carefully but are slower and use more tokens.")
+                }
+            }
+        }
+        item {
+            // When chats compact: Iris and the other agents each have their own point.
+            LaunchedEffect(Unit) { vm.attempt { compaction() }?.let { vm.compaction = it } }
+            Card {
+                CardTitle(
+                    "Chat length before compacting",
+                    "When a chat gets this long, older messages become a summary (nothing is deleted). Every step an agent takes sends the whole chat again, so longer chats cost more per step and are slower.",
+                )
+                val c = vm.compaction
+                if (c == null) Hint("Loading… (needs the server's newest version)")
+                else {
+                    val short = { n: Long -> if (n >= 1_000_000) "${n / 1_000_000}M" else "${n / 1000}k" }
+                    for ((key, who) in listOf("main" to "Iris", "other" to "Other agents")) {
+                        Label(who)
+                        Segmented(c.steps.map { it.toString() to short(it) }, (if (key == "main") c.main else c.other).toString()) { v ->
+                            val n = v.toLong()
+                            scope.launch {
+                                vm.attempt { if (key == "main") putCompaction(c.other, n) else putCompaction(n, c.main) }?.let {
+                                    vm.compaction = it
+                                    vm.showToast("Saved: chats compact at the new point")
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -298,8 +327,8 @@ private fun ResponsesPage(vm: IrisViewModel, back: () -> Unit) {
 
 // ---- Limits ------------------------------------------------------------------------------
 
-private val DAILY = listOf(0L, 100_000L, 250_000L, 500_000L, 1_000_000L, 2_000_000L)
-private val WEEKLY = listOf(0L, 500_000L, 1_000_000L, 2_000_000L, 5_000_000L, 10_000_000L)
+private val DAILY = listOf(0L, 250_000L, 500_000L, 1_000_000L, 2_000_000L, 5_000_000L, 10_000_000L)
+private val WEEKLY = listOf(0L, 1_000_000L, 2_000_000L, 5_000_000L, 10_000_000L, 25_000_000L, 50_000_000L)
 
 @Composable
 private fun LimitsPage(vm: IrisViewModel, back: () -> Unit) {
@@ -309,8 +338,21 @@ private fun LimitsPage(vm: IrisViewModel, back: () -> Unit) {
     var weekly by remember { mutableLongStateOf(0L) }
     var busy by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { vm.attempt { limits() }?.let { limits = it; daily = it.dailyTokens; weekly = it.weeklyTokens } }
-    Page("Usage limits", back) {
-        item { Hint("Caps for all agents together. When one is reached, agents stop until it resets (days at midnight, weeks on Monday) or you raise it.") }
+    var usage by remember { mutableStateOf<UsageDaily?>(null) }
+    var usageMode by remember { mutableStateOf(vm.usageMode) }
+    var range by remember { mutableIntStateOf(30) }
+    LaunchedEffect(range) { usage = vm.attempt { usageDaily(range) } ?: usage }
+    Page("Usage & limits", back) {
+        item {
+            Card {
+                CardTitle("Usage", "How much all agents used each day, in tokens and what it cost.")
+                Segmented(listOf("tokens" to "Tokens", "money" to "Money", "both" to "Both"), usageMode) { usageMode = it; vm.usageMode = it }
+                Segmented(listOf("14" to "14 days", "30" to "30 days", "90" to "90 days"), range.toString()) { range = it.toInt() }
+                val u = usage
+                if (u == null) Hint("Loading… (needs the server's newest version)") else UsageChart(u, usageMode)
+            }
+        }
+        item { Hint("Limits: caps for all agents together. When one is reached, agents stop until it resets (days at midnight, weeks on Monday) or you raise it.") }
         for ((label, presets, row) in listOf(Triple("Daily limit", DAILY, 0), Triple("Weekly limit", WEEKLY, 1))) {
             item(label) {
                 val value = if (row == 0) daily else weekly

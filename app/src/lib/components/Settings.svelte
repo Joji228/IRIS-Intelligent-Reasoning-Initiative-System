@@ -48,11 +48,13 @@
   import VoiceSettings from './VoiceSettings.svelte';
   import EffortSlider from './EffortSlider.svelte';
   import Markdown from './Markdown.svelte';
+  import UsageChart from './UsageChart.svelte';
   import Modal from './Modal.svelte';
   import Select from './Select.svelte';
   import UsageBar from './UsageBar.svelte';
 
   let { tab: initialTab }: { tab?: SettingsTab } = $props();
+  const formatTokensShort = (n: number) => (n >= 1_000_000 ? `${n / 1_000_000}M` : `${Math.round(n / 1000)}k`);
   let tab = $state<SettingsTab>(untrack(() => initialTab) ?? 'models');
   // Narrow windows (phones) show the grouped list first and one page at a time, like the
   // phone app; opened on a given page, they go straight to it. Wide windows show both.
@@ -80,10 +82,10 @@
       ],
     },
     {
-      title: 'Safety',
+      title: 'Safety & usage',
       tabs: [
         { id: 'approvals', label: 'Approvals', icon: ShieldCheck },
-        { id: 'limits', label: 'Usage limits', icon: Gauge },
+        { id: 'limits', label: 'Usage & limits', icon: Gauge },
         { id: 'activity', label: 'Activity log', icon: Activity },
       ],
     },
@@ -500,8 +502,8 @@
 
   // ---- limits ------------------------------------------------------------------
 
-  const dailyPresets = [0, 100_000, 250_000, 500_000, 1_000_000, 2_000_000];
-  const weeklyPresets = [0, 500_000, 1_000_000, 2_000_000, 5_000_000, 10_000_000];
+  const dailyPresets = [0, 250_000, 500_000, 1_000_000, 2_000_000, 5_000_000, 10_000_000];
+  const weeklyPresets = [0, 1_000_000, 2_000_000, 5_000_000, 10_000_000, 25_000_000, 50_000_000];
   let limits = $state<Limits | null>(null);
   let daily = $state(0);
   let weekly = $state(0);
@@ -804,7 +806,10 @@
       void loadDevices();
     }
     if (tab === 'remote') void loadLink();
-    if (tab === 'models') void loadFallback();
+    if (tab === 'models') {
+      void loadFallback();
+      void app.loadCompaction();
+    }
     if (tab === 'approvals') void loadAutoDefault();
     if (tab === 'responses') {
       void loadStyle();
@@ -918,6 +923,41 @@
                 levels answer more carefully but are slower and use more tokens.
               </p>
             </div>
+          </div>
+
+          <!-- When chats compact: Iris and the other agents each have their own point -->
+          <div class="mb-7 rounded-xl border border-line bg-surface/60 p-4">
+            <div class="text-[14px] font-semibold">Chat length before compacting</div>
+            <p class="mb-3.5 text-[12.5px] text-faint">
+              When a chat gets this long, older messages become a summary (nothing is deleted, and agents can still
+              search them). Every step an agent takes sends the whole chat again, so a longer chat costs more per step
+              and is slower. The model can hold up to {app.defaultModel?.context_window ? formatTokensShort(app.defaultModel.context_window) : '1M'}.
+            </p>
+            {#if app.compaction}
+              {@const c = app.compaction}
+              {#each [['main', 'Iris', 'She coordinates and you talk to her most.'], ['other', 'Other agents', 'Specialists, usually on shorter tasks.']] as [key, who, why] (key)}
+                {@const value = key === 'main' ? c.main : c.other}
+                <div class="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2 last:mb-0">
+                  <div class="min-w-36 flex-1">
+                    <div class="text-[13px] font-medium">{who}</div>
+                    <div class="text-[11.5px] text-faint">{why}</div>
+                  </div>
+                  <div class="segmented" role="radiogroup" aria-label="{who}: compact at">
+                    {#each c.steps as step (step)}
+                      <button
+                        role="radio"
+                        aria-checked={value === step}
+                        class={value === step ? 'on' : ''}
+                        onclick={() => (key === 'main' ? app.setCompaction(c.other, step) : app.setCompaction(step, c.main))}
+                        >{formatTokensShort(step)}</button
+                      >
+                    {/each}
+                  </div>
+                </div>
+              {/each}
+            {:else}
+              <p class="text-[12.5px] text-faint">Loading… (needs the server's newest version)</p>
+            {/if}
           </div>
 
           <!-- Fallback: retried here when the main provider fails -->
@@ -1595,7 +1635,10 @@
         </div>
         <p class="hint">The same switch as the Auto button in each agent's chat box.</p>
       {:else if tab === 'limits'}
-        <h3 class="text-[15px] font-semibold">Usage limits</h3>
+        <h3 class="text-[15px] font-semibold">Usage</h3>
+        <p class="mb-4 text-[12.5px] text-faint">How much all agents used each day, in tokens and what it cost.</p>
+        <div class="mb-8 max-w-xl"><UsageChart /></div>
+        <h3 class="text-[15px] font-semibold">Limits</h3>
         <p class="mb-5 text-[12.5px] text-faint">
           Caps for all agents together. When one is reached, agents stop until it resets (days at midnight, weeks
           on Monday) or you raise it.

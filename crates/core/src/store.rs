@@ -176,6 +176,20 @@ r#"
         resolved_at INTEGER
     );
     CREATE INDEX problems_open ON problems(resolved_at, created_at);
+"#,
+// v15: what each usage row was made of, for the daily stats and their cost:
+// new input, input served from the provider's cache, output, and the model.
+// Older replies get their input / output from the messages; cached = -1 means
+// unknown (rows from before this, or providers that don't report it).
+r#"
+    ALTER TABLE usage ADD COLUMN input  INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE usage ADD COLUMN cached INTEGER NOT NULL DEFAULT -1;
+    ALTER TABLE usage ADD COLUMN output INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE usage ADD COLUMN model  TEXT NOT NULL DEFAULT '';
+    UPDATE usage SET
+        input  = COALESCE((SELECT prompt_tokens FROM messages WHERE messages.id = usage.message_id), 0),
+        output = COALESCE((SELECT completion_tokens FROM messages WHERE messages.id = usage.message_id), 0),
+        model  = COALESCE((SELECT model FROM messages WHERE messages.id = usage.message_id), '');
 "#];
 
 pub struct Store {
@@ -279,18 +293,55 @@ impl Store {
         Ok(n > 0)
     }
 
-    /// Records tokens spent outside a reply (e.g. auto mode's safety checks).
+    /// Records tokens spent outside a reply (e.g. auto mode's safety checks),
+    /// when only the total is known (counted as input, cache unknown).
     pub fn add_usage(&self, tokens: i64) -> Result<()> {
-        if tokens <= 0 {
+        self.add_usage_split(tokens, -1, 0, "")
+    }
+
+    /// Records tokens spent outside a reply: input (including what came from
+    /// the cache), the cached part of it, output, and the model.
+    pub fn add_usage_split(&self, input: i64, cached: i64, output: i64, model: &str) -> Result<()> {
+        if input + output <= 0 {
             return Ok(());
         }
         self.with(|c| {
             c.execute(
-                "INSERT INTO usage (message_id, created_at, tokens) VALUES (?1, ?2, ?3)",
-                params![format!("extra-{}", new_id()), now_ms(), tokens],
+                "INSERT INTO usage (message_id, created_at, tokens, input, cached, output, model)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![format!("extra-{}", new_id()), now_ms(), input + output, input, cached, output, model],
             )
         })?;
         Ok(())
+    }
+
+    /// How much of a reply's input came from the provider's cache (set after the reply).
+    pub fn set_usage_cached(&self, message_id: &str, cached: i64) -> Result<()> {
+        self.with(|c| c.execute("UPDATE usage SET cached = ?2 WHERE message_id = ?1", params![message_id, cached]))?;
+        Ok(())
+    }
+
+    /// Every usage row since `since_ms`, oldest first, for the daily stats.
+    pub fn usage_since(&self, since_ms: i64) -> Result<Vec<crate::UsageRow>> {
+        self.with(|c| {
+            let mut stmt = c.prepare(
+                "SELECT created_at, tokens, input, cached, output, model FROM usage
+                 WHERE created_at >= ?1 ORDER BY created_at",
+            )?;
+            let rows = stmt
+                .query_map([since_ms], |r| {
+                    Ok(crate::UsageRow {
+                        created_at: r.get(0)?,
+                        tokens: r.get(1)?,
+                        input: r.get(2)?,
+                        cached: r.get(3)?,
+                        output: r.get(4)?,
+                        model: r.get(5)?,
+                    })
+                })?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            Ok(rows)
+        })
     }
 
     /// Tokens (prompt + completion) of replies started at or after `since_ms`.
@@ -653,9 +704,14 @@ impl Store {
             )?;
             if r.prompt_tokens.is_some() || r.completion_tokens.is_some() {
                 c.execute(
-                    "INSERT OR REPLACE INTO usage (message_id, created_at, tokens)
-                     SELECT id, created_at, ?2 FROM messages WHERE id = ?1",
-                    params![id, r.prompt_tokens.unwrap_or(0) + r.completion_tokens.unwrap_or(0)],
+                    "INSERT OR REPLACE INTO usage (message_id, created_at, tokens, input, output, model)
+                     SELECT id, created_at, ?2, ?3, ?4, COALESCE(model, '') FROM messages WHERE id = ?1",
+                    params![
+                        id,
+                        r.prompt_tokens.unwrap_or(0) + r.completion_tokens.unwrap_or(0),
+                        r.prompt_tokens.unwrap_or(0),
+                        r.completion_tokens.unwrap_or(0)
+                    ],
                 )?;
             }
             Ok(())

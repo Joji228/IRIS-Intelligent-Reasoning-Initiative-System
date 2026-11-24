@@ -44,9 +44,9 @@ I.R.I.S. (Intelligent Reasoning & Initiative System) is a self-hosted team of AI
 - Response style (Settings → Personality & memory): Balanced, Straight to the point, Deep analyst, Witty, Teacher or Professional, plus free-form extra instructions ("call me …, use °C …").
 
 ## Compaction
-- Long chats are compacted: older messages become a short summary the agent keeps as memory, and the messages themselves stay visible in the app. A line in the chat marks where it happened ("Earlier messages were compacted… show summary").
-- Automatic: when a chat reaches 60% of the model's context window (at most 64k tokens), before the next reply and also in the middle of a long run of steps.
-- On demand: type /compact in the message box, "Compact now" in the context ring's popup (the small ring in the chat header), or the agent menu → Compacting. While it runs the chat shows "Compacting the chat…", and a notice says how many messages were summarized.
+- Long chats are compacted: older messages become a short summary the agent keeps as memory, and the messages themselves stay visible in the app. A violet line in the chat marks where it happened ("Compacted · N earlier messages summarized · Show summary").
+- When: Settings → Models → "Chat length before compacting", with its own point for Iris (default 256k tokens) and for the other agents (default 64k): 32k, 64k, 128k, 256k, 512k or 1M. DeepSeek can hold 1M, but every step an agent takes sends the whole chat again, so longer chats cost more per step and are slower; the point always leaves some room in the model's window. It happens before the next reply and also in the middle of a long run of steps.
+- The small ring in the chat header fills towards that point. On demand: type /compact in the message box, "Compact now" in the ring's popup, or the agent menu → Compact the chat. While it runs the chat shows "Compacting the chat…", and a notice says how many messages were summarized.
 
 ## Routines
 - Settings → Routines, or ask any agent ("check my site every morning at 8"). A task wakes the agent on a schedule; a command runs without the AI and only wakes it when something fails. Scheduled commands ask first.
@@ -64,8 +64,10 @@ Agents can drive a real browser (open, click, type, read pages that need JavaScr
 ## Web search
 Settings → Web search: Automatic (Tavily when a key is saved, otherwise DuckDuckGo), DuckDuckGo (free, can rate-limit), Tavily (built for AI agents, free plan 1,000 searches a month) or DeepSeek's own search (paid from the DeepSeek balance).
 
-## Usage limits and activity
-- Settings → Usage limits: daily and weekly token caps for all agents together; when reached, agents stop until the reset (days at midnight, weeks on Monday) or until raised. The credit badge shows the provider balance.
+## Usage, cost and limits
+- Settings → Usage & limits: a chart of how much all agents used each day, switchable between tokens, money and both, for the last 14, 30 or 90 days, with totals for today, the last 7 days and the range. Hover or tap a day for its breakdown (cached input, new input, output).
+- Money is worked out from DeepSeek's price list per 1M tokens: Flash $0.006 cached input / $0.30 new input / $1.20 output at peak hours (01:00–04:00 and 06:00–10:00 UTC on weekdays), half that the rest of the time. Most input comes from DeepSeek's cache, which is why it's cheap. Days marked ≈ include older replies recorded before the cache split, so they're estimates; the DeepSeek balance (the credit badge) is the final word.
+- Daily and weekly token caps for all agents together are on the same page; when one is reached, agents stop until the reset (days at midnight, weeks on Monday) or until it's raised.
 - Settings → Activity log: every tool every agent used, newest first; click one to open its chat. Failed replies and routines also show on the home screen ("Problems").
 
 ## Devices, remote access and the phone app

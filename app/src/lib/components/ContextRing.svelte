@@ -22,10 +22,10 @@
 
   const modelId = $derived(model ?? app.defaultModel?.model ?? 'model');
   const total = $derived(model ? knownContextWindow(model) : (app.defaultModel?.context_window ?? null));
-  // Where the engine compacts by itself (compact.rs threshold: 60% of the window, at most 64k).
-  // The ring fills towards that point, not the whole window: on a 1M model it
-  // would otherwise sit near empty right up to the moment the chat compacts.
-  const compactAt = $derived(Math.min((total ?? 32_000) * 0.6, 64_000));
+  // Where the engine compacts this chat by itself (Settings → Models; Iris has her
+  // own point). The ring fills towards that point, not the whole window: on a 1M
+  // model it would otherwise sit near empty right up to the moment it compacts.
+  const compactAt = $derived(app.compactAtFor(app.agent(agentId), total));
   const pct = $derived(Math.min(100, (used / compactAt) * 100));
   const busy = $derived(Object.values(app.running).some((r) => r.agent_id === agentId));
   const R = 7;

@@ -36,7 +36,7 @@ import type {
   Pairing,
   QueuedMessage,
   ChatPreview,
-  Problem,
+  Problem, UsageDaily, Compaction
 } from './types';
 import type { LinkConnection, LinkResponse } from './link';
 
@@ -133,6 +133,9 @@ export class IrisApi {
   models = (id: string) => this.req<string[]>('GET', `/v1/providers/${id}/models`);
   balance = (id: string) => this.req<Balance>('GET', `/v1/providers/${id}/balance`);
   limits = () => this.req<Limits>('GET', '/v1/settings/limits');
+  usageDaily = (days = 30) => this.req<UsageDaily>('GET', `/v1/usage/daily?days=${days}`);
+  compaction = () => this.req<Compaction>('GET', '/v1/settings/compaction');
+  putCompaction = (other: number, main: number) => this.req<Compaction>('PUT', '/v1/settings/compaction', { other, main });
   update = (refresh = false) => this.req<UpdateStatus>('GET', `/v1/update${refresh ? '?refresh=true' : ''}`);
   installUpdate = (force = false) => this.req<null>('POST', '/v1/update/install', { force });
   setUpdateAutoCheck = (autoCheck: boolean) => this.req<UpdateStatus>('PUT', '/v1/update/settings', { auto_check: autoCheck });

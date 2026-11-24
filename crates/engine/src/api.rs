@@ -173,14 +173,14 @@ impl AppState {
         let (today, week) = self.token_usage();
         if limits.daily_tokens > 0 && today + extra >= limits.daily_tokens as i64 {
             return Some(format!(
-                "Daily token limit reached ({} of {}). It resets at midnight, or raise it in Settings → Usage limits.",
+                "Daily token limit reached ({} of {}). It resets at midnight, or raise it in Settings → Usage & limits.",
                 today + extra,
                 limits.daily_tokens
             ));
         }
         if limits.weekly_tokens > 0 && week + extra >= limits.weekly_tokens as i64 {
             return Some(format!(
-                "Weekly token limit reached ({} of {}). It resets on Monday, or raise it in Settings → Usage limits.",
+                "Weekly token limit reached ({} of {}). It resets on Monday, or raise it in Settings → Usage & limits.",
                 week + extra,
                 limits.weekly_tokens
             ));
@@ -395,6 +395,8 @@ pub fn router(state: AppState) -> Router {
         .route("/settings/limits", get(get_limits).put(put_limits))
         .route("/settings/fallback", get(get_fallback).put(put_fallback))
         .route("/settings/reasoning", get(get_reasoning).put(put_reasoning))
+        .route("/settings/compaction", get(get_compaction).put(put_compaction))
+        .route("/usage/daily", get(usage_daily))
         .route("/settings/auto", get(get_auto_default).put(put_auto_default))
         .route("/settings/style", get(get_style).put(put_style))
         .route("/agents", get(list_agents).post(create_agent))
@@ -693,6 +695,49 @@ async fn put_reasoning(
 ) -> ApiResult<Json<ReasoningDefault>> {
     st.set_default_reasoning(&update.effort).map_err(ApiError::bad_request)?;
     Ok(get_reasoning(State(st)).await)
+}
+
+#[derive(Deserialize)]
+struct DailyQuery {
+    #[serde(default)]
+    days: Option<u32>,
+}
+
+/// Tokens and cost per day (Settings → Usage), the last `days` days (default 30, at most 365).
+async fn usage_daily(State(st): State<AppState>, Query(q): Query<DailyQuery>) -> Json<crate::usage::Daily> {
+    Json(crate::usage::load(&st, q.days.unwrap_or(30).clamp(1, 365)))
+}
+
+/// When chats compact (tokens of context): other agents and Iris, plus the choices.
+#[derive(Serialize, Deserialize)]
+struct Compaction {
+    other: u64,
+    main: u64,
+    #[serde(default)]
+    steps: Vec<u64>,
+}
+
+async fn get_compaction(State(st): State<AppState>) -> Json<Compaction> {
+    let d = st.defaults.read().unwrap();
+    Json(Compaction {
+        other: d.compact_at.unwrap_or(crate::compact::DEFAULT_OTHER),
+        main: d.compact_at_main.unwrap_or(crate::compact::DEFAULT_MAIN),
+        steps: crate::compact::STEPS.to_vec(),
+    })
+}
+
+async fn put_compaction(State(st): State<AppState>, Json(update): Json<Compaction>) -> ApiResult<Json<Compaction>> {
+    let steps = crate::compact::STEPS;
+    if !steps.contains(&update.other) || !steps.contains(&update.main) {
+        return Err(ApiError::bad_request(format!("choose one of {steps:?} tokens")));
+    }
+    config::set_compaction(&st.data_dir, update.other, update.main).map_err(|e| ApiError::bad_request(e.to_string()))?;
+    {
+        let mut d = st.defaults.write().unwrap();
+        d.compact_at = Some(update.other);
+        d.compact_at_main = Some(update.main);
+    }
+    Ok(get_compaction(State(st)).await)
 }
 
 #[derive(Serialize, Deserialize)]

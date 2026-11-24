@@ -129,6 +129,7 @@ pub async fn run(
         research: false,
         voice: false,
         commands: Vec::new(),
+        cached_tokens: None,
     };
     let result = reply.generate(&cancel).await;
     state.runs.lock().unwrap().remove(&thread_id);
@@ -150,6 +151,10 @@ pub async fn run(
         Ok(Some(message)) => state.emit(Event::MessageCompleted { message }),
         Ok(None) => {}
         Err(e) => error!("storing reply {reply_id}: {e}"),
+    }
+    // For the usage stats: how much of the input came from the provider's cache.
+    if let Some(cached) = reply.cached_tokens {
+        let _ = state.store.set_usage_cached(&reply_id, cached);
     }
     if let Ok(Some(thread)) = state.store.touch_thread(&thread_id) {
         state.emit(Event::ThreadUpdated { thread });
@@ -285,6 +290,8 @@ struct Reply<'a> {
     /// Commands that ran in this reply (auto-approved or approved by the user), oldest
     /// first: context for the auto-mode reviewer, and a rerun needs no new review.
     commands: Vec<String>,
+    /// Input served from the provider's cache over the whole reply (usage stats).
+    cached_tokens: Option<i64>,
 }
 
 /// Toolsets that make an agent a specialist, in families of the same kind of
@@ -299,6 +306,8 @@ struct Totals {
     model: Option<String>,
     prompt_tokens: i64,
     completion_tokens: i64,
+    /// Input served from the provider's cache, when it says (DeepSeek does).
+    cached_tokens: Option<i64>,
     reported: bool,
     /// The last model call's prompt + completion: how full the context is.
     context: Option<i64>,
@@ -423,6 +432,7 @@ impl Reply<'_> {
             if let Some(u) = &done.usage {
                 if let Some(hit) = u.prompt_cache_hit_tokens {
                     info!("{}: {} prompt tokens, {hit} from cache", self.agent.name, u.prompt_tokens);
+                    totals.cached_tokens = Some(totals.cached_tokens.unwrap_or(0) + i64::from(hit));
                 }
                 totals.prompt_tokens += i64::from(u.prompt_tokens);
                 totals.completion_tokens += i64::from(u.completion_tokens);
@@ -468,7 +478,11 @@ impl Reply<'_> {
             }
             // A long run of steps that reached the ceiling: the older messages are compacted
             // (once per reply) and the history rebuilt around this reply's steps so far.
-            let ceiling = crate::compact::threshold(&conn.model, self.state.defaults.read().unwrap().context_window);
+            let ceiling = crate::compact::threshold(
+                &conn.model,
+                self.state.defaults.read().unwrap().context_window,
+                crate::compact::chosen_for(self.state, self.agent),
+            );
             if !compacted_mid_reply && totals.context.is_some_and(|c| c.max(0) as u64 >= ceiling) {
                 compacted_mid_reply = true;
                 match crate::compact::compact(self.state, self.agent, self.thread_id, &conn.client, &conn.model, true).await {
@@ -1006,6 +1020,7 @@ impl Reply<'_> {
     }
 
     fn finish(&mut self, status: MessageStatus, error: Option<String>, totals: Totals) -> MessageResult {
+        self.cached_tokens = totals.cached_tokens;
         // Steps still open when the reply ends can never finish.
         for step in self.rounds.iter_mut().flat_map(|r| r.tools.iter_mut()) {
             if matches!(step.status, ToolStatus::Running | ToolStatus::AwaitingApproval) {

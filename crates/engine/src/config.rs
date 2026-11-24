@@ -222,6 +222,24 @@ pub struct DefaultsConfig {
     /// The auto mode new agents start with: "off", "careful" or "full".
     #[serde(default)]
     pub auto_mode: Option<String>,
+    /// When agents' chats are compacted (tokens of context); unset = 64k.
+    #[serde(default)]
+    pub compact_at: Option<u64>,
+    /// The same for Iris; unset = 256k.
+    #[serde(default)]
+    pub compact_at_main: Option<u64>,
+}
+
+/// Saves when chats are compacted: other agents' and Iris's (tokens of context).
+pub fn set_compaction(dir: &Path, other: u64, main: u64) -> Result<()> {
+    let path = config_path(dir);
+    let mut doc = read_doc(&path)?;
+    if !doc.contains_key("defaults") {
+        doc["defaults"] = toml_edit::Item::Table(toml_edit::Table::new());
+    }
+    doc["defaults"]["compact_at"] = toml_edit::value(other as i64);
+    doc["defaults"]["compact_at_main"] = toml_edit::value(main as i64);
+    write_doc(&path, &doc)
 }
 
 /// Saves the default reasoning level; an empty `level` means the provider's default.

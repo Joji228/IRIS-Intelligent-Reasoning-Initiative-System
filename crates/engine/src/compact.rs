@@ -11,18 +11,30 @@ use crate::{api::AppState, config, events::Event, tools};
 
 /// Messages kept word for word after a compaction.
 const KEEP_RECENT: usize = 6;
-/// Never let a conversation grow past this many tokens before compacting,
-/// even on 1M-token models: long contexts are slow and costly.
-const MAX_BEFORE_COMPACT: u64 = 64_000;
+/// The choices for when chats compact (Settings → Models). Every step an agent
+/// takes re-sends the whole chat, so a bigger context costs more per step and is
+/// slower; Iris, who coordinates and is talked to most, keeps more by default.
+pub const STEPS: &[u64] = &[32_000, 64_000, 128_000, 256_000, 512_000, 1_000_000];
+pub const DEFAULT_OTHER: u64 = 64_000;
+pub const DEFAULT_MAIN: u64 = 256_000;
 /// For models whose context window isn't known.
 const UNKNOWN_WINDOW: u64 = 32_000;
 /// How much transcript one compaction call reads at most (characters).
 const MAX_TRANSCRIPT_CHARS: usize = 240_000;
 
-/// When a conversation using `model` should be compacted (tokens).
-pub fn threshold(model: &str, override_window: Option<u64>) -> u64 {
+/// When a conversation using `model` should be compacted (tokens): the chosen
+/// point, but always with room left in the model's window for the reply and its
+/// steps (15% of a big window, 40% of a small one).
+pub fn threshold(model: &str, override_window: Option<u64>, chosen: u64) -> u64 {
     let window = config::known_context_window(model).or(override_window).unwrap_or(UNKNOWN_WINDOW);
-    (window * 6 / 10).min(MAX_BEFORE_COMPACT)
+    let room = if window >= 256_000 { window * 85 / 100 } else { window * 6 / 10 };
+    chosen.min(room)
+}
+
+/// The compaction point chosen for this agent (Iris has her own).
+pub fn chosen_for(st: &AppState, agent: &Agent) -> u64 {
+    let d = st.defaults.read().unwrap();
+    if agent.role == "main" { d.compact_at_main.unwrap_or(DEFAULT_MAIN) } else { d.compact_at.unwrap_or(DEFAULT_OTHER) }
 }
 
 /// How full the conversation was at its latest reply.
@@ -43,7 +55,7 @@ pub async fn compact(
     let thread = st.store.get_thread(thread_id).map_err(|e| e.to_string())?.ok_or("the chat is gone")?;
     let all = st.store.list_messages(thread_id).map_err(|e| e.to_string())?;
     if !force {
-        let limit = threshold(model, st.defaults.read().unwrap().context_window);
+        let limit = threshold(model, st.defaults.read().unwrap().context_window, chosen_for(st, agent));
         if (last_context(&all) as u64) < limit {
             return Ok(false);
         }
@@ -113,7 +125,10 @@ pub async fn compact(
         }
     };
     let tokens = done.usage.as_ref().map_or(0, |u| i64::from(u.prompt_tokens) + i64::from(u.completion_tokens));
-    let _ = st.store.add_usage(tokens);
+    if let Some(u) = &done.usage {
+        let cached = u.prompt_cache_hit_tokens.map_or(-1, i64::from);
+        let _ = st.store.add_usage_split(i64::from(u.prompt_tokens), cached, i64::from(u.completion_tokens), model);
+    }
     let summary = done.content.trim();
     if summary.is_empty() {
         progress(false, 0);
@@ -141,9 +156,14 @@ mod tests {
 
     #[test]
     fn thresholds() {
-        assert_eq!(threshold("deepseek-flash", None), MAX_BEFORE_COMPACT);
-        assert_eq!(threshold("some-local-model", None), UNKNOWN_WINDOW * 6 / 10);
-        assert_eq!(threshold("some-local-model", Some(8_000)), 4_800);
+        // DeepSeek Flash has a 1M window: the chosen point applies, up to 85% of it.
+        assert_eq!(threshold("deepseek-flash", None, DEFAULT_OTHER), 64_000);
+        assert_eq!(threshold("deepseek-flash", None, DEFAULT_MAIN), 256_000);
+        assert_eq!(threshold("deepseek-flash", None, 1_000_000), 850_000);
+        // Small or unknown windows keep 40% free.
+        assert_eq!(threshold("some-local-model", None, DEFAULT_OTHER), UNKNOWN_WINDOW * 6 / 10);
+        assert_eq!(threshold("some-local-model", Some(8_000), DEFAULT_MAIN), 4_800);
+        assert!(STEPS.contains(&DEFAULT_OTHER) && STEPS.contains(&DEFAULT_MAIN));
     }
 
     // ---- end to end, against a fake model server ----
@@ -279,7 +299,7 @@ mod tests {
     #[tokio::test]
     async fn compacts_by_itself_at_the_ceiling_and_not_before() {
         let st = state();
-        let ceiling = threshold("deepseek-flash", None) as i64;
+        let ceiling = threshold("deepseek-flash", None, DEFAULT_OTHER) as i64;
         let (agent, quiet) = chat(&st, 10, ceiling - 1);
         let unused = OpenAiCompatible::new("http://127.0.0.1:9/v1", None);
         assert!(!compact(&st, &agent, &quiet, &unused, "deepseek-flash", false).await.unwrap(), "below the ceiling: nothing to do");
