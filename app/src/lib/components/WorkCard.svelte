@@ -52,6 +52,22 @@
     browser_open: ['page opened', 'pages opened'],
     browser_read: ['page read', 'pages read'],
     search_chats: ['chat search', 'chat searches'],
+    system_status: ['health check', 'health checks'],
+    app_updates: ['update check', 'update checks'],
+    windows_updates: ['update check', 'update checks'],
+    search_apps: ['app search', 'app searches'],
+    update_apps: ['install', 'installs'],
+    install_app: ['install', 'installs'],
+    uninstall_app: ['removal', 'removals'],
+    power: ['power action', 'power actions'],
+    memory: ['memory note', 'memory notes'],
+    view_image: ['image viewed', 'images viewed'],
+    browser_click: ['click', 'clicks'],
+    browser_type: ['entry typed', 'entries typed'],
+    get_settings: ['settings look', 'settings looks'],
+    change_setting: ['setting changed', 'settings changed'],
+    about_iris: ['guide lookup', 'guide lookups'],
+    check_task: ['task check', 'task checks'],
   };
   const tally = $derived.by(() => {
     const counts = new Map<string, [number, [string, string]]>();
@@ -82,7 +98,14 @@
       return `${h.name} is working${what && what !== 'thinking' ? ` · ${what.replace(/_/g, ' ')}` : '…'}`;
     }
     if (live) return helpers.length ? (lastStep?.summary ?? 'Working…') : `${steps.length} ${steps.length === 1 ? 'step' : 'steps'} so far · ${tally}`;
-    if (!helpers.length && steps.length === 1) return failed ? 'Failed' : 'Done';
+    // One step: its real outcome (a "task was stopped" summary shouldn't read "Done").
+    if (!helpers.length && steps.length === 1) {
+      const s = steps[0];
+      if (s.status === 'error') return 'Failed';
+      if (s.status === 'denied') return 'Denied';
+      if (s.status === 'cancelled' || /\bstopped\b/i.test(s.summary ?? '')) return 'Stopped';
+      return 'Done';
+    }
     if (!helpers.length) return `${tally}${failed ? ` · ${failed} failed` : ''}`;
     return `${steps.length} ${steps.length === 1 ? 'step' : 'steps'}`;
   });

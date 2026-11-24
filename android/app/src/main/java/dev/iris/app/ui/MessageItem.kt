@@ -462,6 +462,22 @@ private val WORK_KINDS = mapOf(
     "browser_open" to ("page opened" to "pages opened"),
     "browser_read" to ("page read" to "pages read"),
     "search_chats" to ("chat search" to "chat searches"),
+    "system_status" to ("health check" to "health checks"),
+    "app_updates" to ("update check" to "update checks"),
+    "windows_updates" to ("update check" to "update checks"),
+    "search_apps" to ("app search" to "app searches"),
+    "update_apps" to ("install" to "installs"),
+    "install_app" to ("install" to "installs"),
+    "uninstall_app" to ("removal" to "removals"),
+    "power" to ("power action" to "power actions"),
+    "memory" to ("memory note" to "memory notes"),
+    "view_image" to ("image viewed" to "images viewed"),
+    "browser_click" to ("click" to "clicks"),
+    "browser_type" to ("entry typed" to "entries typed"),
+    "get_settings" to ("settings look" to "settings looks"),
+    "change_setting" to ("setting changed" to "settings changed"),
+    "about_iris" to ("guide lookup" to "guide lookups"),
+    "check_task" to ("task check" to "task checks"),
 )
 
 /** An agent's behind-the-scenes work (or Iris's team) folded into one box with a live status line. */
@@ -501,7 +517,13 @@ private fun WorkCard(vm: IrisViewModel, rounds: List<Round>, live: Boolean) {
         }
         live && helpers.isEmpty() -> "${steps.size} ${if (steps.size == 1) "step" else "steps"} so far · $tally"
         live -> lastStep?.summary ?: "Working…"
-        helpers.isEmpty() && steps.size == 1 -> if (failed > 0) "Failed" else "Done"
+        // One step: its real outcome (a "task was stopped" summary shouldn't read "Done").
+        helpers.isEmpty() && steps.size == 1 -> when {
+            steps[0].status == "error" -> "Failed"
+            steps[0].status == "denied" -> "Denied"
+            steps[0].status == "cancelled" || Regex("\\bstopped\\b", RegexOption.IGNORE_CASE).containsMatchIn(steps[0].summary) -> "Stopped"
+            else -> "Done"
+        }
         helpers.isEmpty() -> tally + if (failed > 0) " · $failed failed" else ""
         else -> "${steps.size} ${if (steps.size == 1) "step" else "steps"}"
     }

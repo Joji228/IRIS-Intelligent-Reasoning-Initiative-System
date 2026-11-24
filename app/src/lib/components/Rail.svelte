@@ -44,12 +44,27 @@
     if (app.isWorking(agent.id)) return { text: app.statusLine(agent.id), tone: 'busy' };
     const p = app.previews[agent.id];
     if (!p) return { text: agent.description || 'No messages yet', tone: 'plain' };
-    const text = p.text
-      .replace(/^\[Deep research\]\s*/, '')
+    // Notes the engine posted as "user" messages read as who sent them, not "You:".
+    let raw = p.text;
+    let mine = p.role === 'user';
+    const task = raw.match(/^\[Task from ([^\]—]+?)\s*(?:—[^\]]*)?\]\s*/);
+    const routine = raw.match(/^\[Routine:\s*([^\]]+)\]\s*/);
+    if (task) {
+      raw = `${task[1].trim()}: ${raw.slice(task[0].length)}`;
+      mine = false;
+    } else if (routine) {
+      raw = `Routine “${routine[1].trim()}”`;
+      mine = false;
+    } else if (/^\[I\.R\.I\.S\. [a-z]+\]/.test(raw)) {
+      raw = raw.replace(/^\[I\.R\.I\.S\. [a-z]+\]\s*/, '');
+      mine = false;
+    }
+    const text = raw
+      .replace(/^\[(Deep research|Voice call)\]\s*/, '')
       .replace(/[#*_`>|]+/g, '')
       .replace(/\s+/g, ' ')
       .trim();
-    return { text, tone: p.role === 'user' ? 'me' : 'plain' };
+    return { text, tone: mine ? 'me' : 'plain' };
   }
 
   // ---- drag to reorder (Iris stays first) ----

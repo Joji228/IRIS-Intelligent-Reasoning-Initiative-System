@@ -333,7 +333,7 @@
     place-items: center;
     box-shadow:
       0 1px 3px rgb(0 0 0 / 0.3),
-      0 0 0 1px color-mix(in srgb, var(--tint) 45%, transparent),
+      0 0 0 1.5px color-mix(in srgb, var(--tint) 75%, transparent),
       0 0 calc(6px + var(--heat) * 12px) color-mix(in srgb, var(--tint) calc(20% + var(--heat) * 30%), transparent);
     /* Position comes from the spring in the script; only looks are transitioned here. */
     transition:

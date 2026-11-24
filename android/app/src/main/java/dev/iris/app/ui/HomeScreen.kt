@@ -210,8 +210,9 @@ private fun AgentRow(vm: IrisViewModel, agent: Agent) {
                         vm.isWorking(agent.id) -> Shimmer(vm.statusLine(agent.id), 14.sp)
                         preview != null -> BasicText(
                             buildAnnotatedString {
-                                if (preview.role == "user") withStyle(SpanStyle(color = C.muted)) { append("You: ") }
-                                append(previewText(preview.text))
+                                val (text, mine) = previewOf(preview.text, preview.role == "user")
+                                if (mine) withStyle(SpanStyle(color = C.muted)) { append("You: ") }
+                                append(text)
                             },
                             style = style(14.sp, if (unread) C.text else C.faint),
                             maxLines = 1,
@@ -229,6 +230,18 @@ private fun AgentRow(vm: IrisViewModel, agent: Agent) {
 }
 
 /** A chat line as plain text: no research tag, Markdown marks or line breaks. */
+private val TASK_HEADER = Regex("^\\[Task from ([^\\]—]+?)\\s*(?:—[^\\]]*)?\\]\\s*")
+private val ROUTINE_HEADER = Regex("^\\[Routine:\\s*([^\\]]+)\\]\\s*")
+private val NOTE_HEADER = Regex("^\\[I\\.R\\.I\\.S\\. [a-z]+\\]\\s*")
+
+/** A chat preview's text, and whether it's the user's own: notes the engine posted as "user" messages read as who sent them. */
+private fun previewOf(raw: String, user: Boolean): Pair<String, Boolean> {
+    TASK_HEADER.find(raw)?.let { return previewText("${it.groupValues[1].trim()}: ${raw.substring(it.range.last + 1)}") to false }
+    ROUTINE_HEADER.find(raw)?.let { return "Routine “${it.groupValues[1].trim()}”" to false }
+    NOTE_HEADER.find(raw)?.let { return previewText(raw.substring(it.range.last + 1)) to false }
+    return previewText(raw) to user
+}
+
 private fun previewText(s: String) = s.removePrefix(Prefixes.RESEARCH).removePrefix(Prefixes.VOICE)
     .replace(Regex("[#*_`>|]+"), "")
     .replace(Regex("\\s+"), " ")

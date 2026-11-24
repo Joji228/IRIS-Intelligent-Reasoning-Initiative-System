@@ -28,10 +28,14 @@
       <button class="btn-primary py-0.5! px-2.5! text-[12px]" onclick={() => app.installUpdate(true)}>Update anyway</button>
       <button class="btn-ghost py-0.5! px-2.5! text-[12px]" onclick={() => (app.updateAsk = null)}>Not now</button>
     {:else}
-      <Download size={14} />
-      <span>I.R.I.S. {u.latest?.version} is available.</span>
+      <Download size={14} class="max-sm:hidden" />
+      <!-- One line on phones: shorter text, What's new is a tap on the version -->
+      <span class="max-sm:hidden">I.R.I.S. {u.latest?.version} is available.</span>
+      <button class="sm:hidden underline decoration-dotted underline-offset-2" onclick={() => (app.modal = { kind: 'settings', tab: 'about' })}>
+        I.R.I.S. {u.latest?.version} is out
+      </button>
       {#if u.latest?.notes}
-        <button class="btn-ghost py-0.5! px-2.5! text-[12px]" onclick={() => (app.modal = { kind: 'settings', tab: 'about' })}>What's new</button>
+        <button class="btn-ghost py-0.5! px-2.5! text-[12px] max-sm:hidden" onclick={() => (app.modal = { kind: 'settings', tab: 'about' })}>What's new</button>
       {/if}
       <button class="btn-primary py-0.5! px-2.5! text-[12px]" onclick={() => app.installUpdate()}>Update now</button>
     {/if}

@@ -22,15 +22,17 @@
 
   const modelId = $derived(model ?? app.defaultModel?.model ?? 'model');
   const total = $derived(model ? knownContextWindow(model) : (app.defaultModel?.context_window ?? null));
-  const pct = $derived(total ? Math.min(100, (used / total) * 100) : 0);
   // Where the engine compacts by itself (compact.rs threshold: 60% of the window, at most 64k).
+  // The ring fills towards that point, not the whole window: on a 1M model it
+  // would otherwise sit near empty right up to the moment the chat compacts.
   const compactAt = $derived(Math.min((total ?? 32_000) * 0.6, 64_000));
+  const pct = $derived(Math.min(100, (used / compactAt) * 100));
   const busy = $derived(Object.values(app.running).some((r) => r.agent_id === agentId));
   const R = 7;
   const C = 2 * Math.PI * R;
   const stroke = $derived(pct >= 90 ? 'var(--c-danger)' : pct >= 70 ? 'var(--c-warn)' : 'var(--c-accent-hi)');
   const label = $derived(
-    total ? `Context ${formatTokens(used)} / ${formatTokens(total)} (${pct < 1 && used > 0 ? '<1' : Math.round(pct)}%)` : `Context ${formatTokens(used)}`,
+    `Context ${formatTokens(used)} of ${formatTokens(compactAt)} before it compacts (${pct < 1 && used > 0 ? '<1' : Math.round(pct)}%)`,
   );
 
   function toggle() {
@@ -85,8 +87,8 @@
         <UsageBar
           label="Context"
           {used}
-          limit={total}
-          hint={`This conversation with ${agentName} · ${modelId}${total ? ` holds up to ${formatTokens(total)} tokens` : ''}`}
+          limit={compactAt}
+          hint={`This conversation with ${agentName} · ${modelId}${total ? ` holds up to ${formatTokens(total)}` : ''}`}
         />
         <div class="flex items-center gap-3">
           <p class="min-w-0 flex-1 text-[11.5px] leading-snug text-faint">

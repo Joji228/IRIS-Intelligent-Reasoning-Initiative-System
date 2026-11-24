@@ -269,8 +269,8 @@ fun EffortSlider(
                     val t = thumbScale
                     val center = Offset(tx, cy)
                     drawCircle(hot.copy(alpha = (0.12f + 0.25f * heat) * dim), radius = (15.dp.toPx() + 6.dp.toPx() * heat) * t, center = center)
-                    drawCircle(Color.Black.copy(alpha = 0.28f * dim), radius = 12.5.dp.toPx() * t, center = center + Offset(0f, 1.dp.toPx()))
-                    drawCircle(hot.copy(alpha = 0.5f * dim), radius = 12.5.dp.toPx() * t, center = center)
+                    drawCircle(Color.Black.copy(alpha = 0.28f * dim), radius = 13.6.dp.toPx() * t, center = center + Offset(0f, 1.dp.toPx()))
+                    drawCircle(hot.copy(alpha = 0.8f * dim), radius = 13.2.dp.toPx() * t, center = center)
                     drawCircle(Color.White.copy(alpha = 0.55f + 0.45f * dim), radius = 12.dp.toPx() * t, center = center)
                     drawCircle(hot.copy(alpha = dim), radius = 4.dp.toPx() * (if (dragging) 1.25f else 1f) * t, center = center)
                 },
