@@ -47,7 +47,10 @@ pub fn label(name: &str, ok: bool, output: String) -> String {
 /// Whether finishing this call means the reply now holds outside text: web and
 /// connected-service results, and a task result that says it came from agents that read them.
 pub fn taints(name: &str, ok: bool, output: &str) -> bool {
-    ok && (is_outside_tool(name) || (name == "check_task" && output.contains(RESULT_NOTE_START)))
+    ok && (is_outside_tool(name)
+        || (name == "check_task" && output.contains(RESULT_NOTE_START))
+        // Release notes are read from GitHub; the built-in guide itself is ours.
+        || (name == "about_iris" && output.contains(crate::guide::RELEASES_HEADING)))
 }
 
 /// Whether a finished reply read outside content (a successful web or connected-service step).

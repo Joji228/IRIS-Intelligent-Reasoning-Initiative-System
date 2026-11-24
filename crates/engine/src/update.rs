@@ -37,7 +37,7 @@ const CHECK_EVERY: Duration = Duration::from_secs(6 * 60 * 60);
 /// No installer is anywhere near this; anything bigger is refused.
 const MAX_DOWNLOAD: u64 = 200 * 1024 * 1024;
 
-fn repo() -> String {
+pub(crate) fn repo() -> String {
     std::env::var("IRIS_UPDATE_REPO").ok().filter(|r| r.split('/').count() == 2).unwrap_or_else(|| REPO.to_owned())
 }
 

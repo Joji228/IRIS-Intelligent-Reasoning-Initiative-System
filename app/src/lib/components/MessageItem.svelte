@@ -63,9 +63,9 @@
   );
   const lastRound = $derived(rounds[rounds.length - 1]);
   const idle = $derived(streaming && !lastRound.content && !lastRound.reasoning && lastRound.tools.length === 0);
-  // The main agent's tool steps fold into one box; only its answer (the last
+  // Every agent's tool steps fold into one box; only its answer (the last
   // round, once it has no tools) and steps waiting for the user stay out.
-  const compact = $derived(agent?.role === 'main' && rounds.some((r) => r.tools.length > 0));
+  const compact = $derived(rounds.some((r) => r.tools.length > 0));
   // A reply that ends on a question (ask_user): the card is its answer.
   const asks = (r: { tools: { name: string }[] }) => r.tools.length > 0 && r.tools.every((t) => t.name === 'ask_user');
   const finalIdx = $derived(lastRound.tools.length === 0 || asks(lastRound) ? rounds.length - 1 : rounds.length);

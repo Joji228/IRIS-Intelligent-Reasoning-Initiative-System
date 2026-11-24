@@ -369,6 +369,9 @@ impl Reply<'_> {
         let mut opts = ChatOptions { tools: self.specs(), reasoning, ..Default::default() };
         let mut totals = Totals::default();
         let max_rounds = if self.research { MAX_RESEARCH_ROUNDS } else { MAX_ROUNDS };
+        // Where this reply's own steps start in `history`, and whether it already compacted.
+        let mut base = history.len();
+        let mut compacted_mid_reply = false;
 
         for round in 0..max_rounds {
             if let Some(reason) = self.state.limit_reached(totals.prompt_tokens + totals.completion_tokens) {
@@ -462,6 +465,25 @@ impl Reply<'_> {
             if !self.pending_images.is_empty() {
                 let images = std::mem::take(&mut self.pending_images);
                 history.push(ChatMessage::user_with_images("[The image(s) you asked to view]", images));
+            }
+            // A long run of steps that reached the ceiling: the older messages are compacted
+            // (once per reply) and the history rebuilt around this reply's steps so far.
+            let ceiling = crate::compact::threshold(&conn.model, self.state.defaults.read().unwrap().context_window);
+            if !compacted_mid_reply && totals.context.is_some_and(|c| c.max(0) as u64 >= ceiling) {
+                compacted_mid_reply = true;
+                match crate::compact::compact(self.state, self.agent, self.thread_id, &conn.client, &conn.model, true).await {
+                    Ok(true) => {
+                        if let Ok(mut fresh) = self.build_history(&conn) {
+                            let ours = history.split_off(base);
+                            base = fresh.len();
+                            fresh.extend(ours);
+                            history = fresh;
+                        }
+                        self.state.set_activity(self.thread_id, "thinking", "");
+                    }
+                    Ok(false) => {}
+                    Err(e) => warn!("compacting {}'s chat mid-reply failed: {e}", self.agent.name),
+                }
             }
         }
 
@@ -749,6 +771,8 @@ impl Reply<'_> {
                     crate::develop::run(&st, &me, self.thread_id, call).await
                 } else if call.name == "search_chats" {
                     crate::recall::run(&st, call)
+                } else if call.name == "about_iris" {
+                    crate::guide::run(&st, call).await
                 } else if call.name == "use_skill" || call.name == "save_skill" {
                     crate::skills::run(&st.data_dir, &me.name, call)
                 } else if tools::MODEL_FUNCTIONS.contains(&call.name.as_str()) {
@@ -1130,6 +1154,12 @@ fn system_prompt(state: &AppState, agent: &Agent, thread_id: &str, conn: &Conn, 
         prompt.push_str(&format!(" If that provider fails, replies switch to the fallback {m} ({}).", state.provider_name(&p)));
     }
     prompt.push_str(" Use tools when they make the answer more accurate; never invent their results.");
+    prompt.push_str(&format!(
+        " You are part of I.R.I.S. {}: when the user asks about I.R.I.S. itself (what it or you can do, where a \
+         setting is, how to do something in the app, its versions or what's new), look it up with about_iris \
+         instead of guessing.",
+        crate::guide::VERSION
+    ));
     prompt.push_str(crate::outside::PROMPT_RULE);
     if agent.role != "main" {
         prompt.push_str(

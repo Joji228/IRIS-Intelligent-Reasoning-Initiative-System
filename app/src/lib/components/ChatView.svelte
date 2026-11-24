@@ -20,11 +20,14 @@
   // How full this conversation is: the latest reply that reported it.
   const contextUsed = $derived.by(() => {
     for (let i = app.messages.length - 1; i >= 0; i--) {
+      // Compacted since that reply: its size no longer applies (the next reply shows the new one).
+      if (app.messages[i].created_at <= (app.thread?.summary_until ?? 0)) return 0;
       const n = app.messages[i].context_tokens;
       if (n != null) return n;
     }
     return 0;
   });
+  const compactingNow = $derived(!!(app.thread && app.compacting[app.thread.id]));
 
   // Where older messages were compacted into a summary (shown as a divider).
   const summaryUntil = $derived(app.thread?.summary_until ?? 0);
@@ -150,7 +153,7 @@
       <div class="flex min-w-0 shrink items-center gap-0.5 rounded-full border border-line bg-surface/60 p-0.5 max-sm:shrink-0">
         <ModelPicker {agent} disabled={app.conn !== 'online'} below />
         <AutoPicker {agent} below />
-        <div class="px-1 max-sm:hidden"><ContextRing used={contextUsed} agentName={agent.name} model={agent.provider && agent.model ? agent.model : undefined} below /></div>
+        <div class="px-1 max-sm:hidden"><ContextRing used={contextUsed} agentId={agent.id} agentName={agent.name} model={agent.provider && agent.model ? agent.model : undefined} below /></div>
       </div>
       <div class="max-md:hidden"><CreditBadge /></div>
       <!-- Call: a soft violet disc, green with a beating dot while on a call with this agent -->
@@ -220,13 +223,22 @@
               </div>
             {/if}
             {#if i === firstKept && app.thread?.summary}
-              <div class="flex flex-col items-center gap-2">
-                <button
-                  class="flex items-center gap-1.5 rounded-full bg-surface px-3 py-1 text-[11.5px] text-faint transition hover:text-text"
-                  onclick={() => (showSummary = !showSummary)}
-                >
-                  <Archive size={12} /> Earlier messages were compacted to save context · {showSummary ? 'hide' : 'show'} summary
-                </button>
+              <!-- Where the chat was compacted: a full-width divider, so it's easy to spot -->
+              <div class="flex flex-col items-center gap-2 animate-fade-in">
+                <div class="flex w-full items-center gap-3">
+                  <span class="h-px flex-1 bg-gradient-to-r from-transparent to-accent/40"></span>
+                  <button
+                    class="flex items-center gap-2 rounded-full border border-accent/35 bg-accent-soft px-3.5 py-1.5 text-[12px] text-accent-hi transition hover:border-accent/60"
+                    onclick={() => (showSummary = !showSummary)}
+                    aria-expanded={showSummary}
+                  >
+                    <Archive size={13} />
+                    <span>Compacted · {firstKept} earlier {firstKept === 1 ? 'message' : 'messages'} summarized</span>
+                    <span class="text-faint">·</span>
+                    <span class="font-medium">{showSummary ? 'Hide' : 'Show'} summary</span>
+                  </button>
+                  <span class="h-px flex-1 bg-gradient-to-l from-transparent to-accent/40"></span>
+                </div>
                 {#if showSummary}
                   <div class="w-full rounded-xl border border-line bg-surface/60 px-4 py-3 text-[13px] text-muted animate-fade-in">
                     <Markdown text={app.thread.summary} />
@@ -289,6 +301,15 @@
                 </button>
               </div>
             {/each}
+          </div>
+        {/if}
+        {#if compactingNow}
+          <!-- Compaction in progress (on its own at the limit, or from /compact or the menu) -->
+          <div class="mb-2 flex justify-center animate-fade-in">
+            <span class="flex items-center gap-2 rounded-full border border-accent/30 bg-accent-soft px-3.5 py-1.5 text-[12px] text-accent-hi">
+              <LoaderCircle size={13} class="animate-spin" />
+              <span class="shimmer">Compacting the chat · summarizing older messages</span>
+            </span>
           </div>
         {/if}
         <Composer

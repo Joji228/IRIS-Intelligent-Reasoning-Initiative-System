@@ -324,6 +324,16 @@ pub fn specs_for(enabled: &[String]) -> Vec<ToolSpec> {
             "required": ["name", "description", "instructions"]
         }),
     ));
+    // Knowing the app itself: every agent (see `guide.rs`).
+    specs.push(spec(
+        "about_iris",
+        "Look up I.R.I.S. itself: what it can do, where a setting is, how to do something in the app, safety, the \
+         phone app, or (topic \"releases\") the latest versions and what's new. Empty topic: an overview.",
+        json!({
+            "type": "object",
+            "properties": { "topic": { "type": "string", "description": "e.g. \"compaction\", \"voice calls\", \"releases\"." } }
+        }),
+    ));
     if on("web_search") {
         specs.push(spec(
             "web_search",
@@ -686,6 +696,7 @@ pub fn describe(call: &ToolCall) -> String {
             format!("{server}: {}", parts.next().unwrap_or_default().replace('_', " "))
         }
         "search_chats" => format!("Searching past chats for “{}”", s("query")),
+        "about_iris" => "Looking it up in the I.R.I.S. guide".into(),
         "code_status" => "Checking the source repo".into(),
         "code_search" => format!("Searching the code for “{}”", s("pattern")),
         "code_read" => format!("Reading {}", s("path")),
@@ -806,7 +817,7 @@ mod tests {
         let names = |v: &[&str]| -> Vec<String> {
             specs_for(&v.iter().map(|s| s.to_string()).collect::<Vec<_>>()).into_iter().map(|s| s.name).skip(ALWAYS.len()).collect()
         };
-        const ALWAYS: &[&str] = &["memory", "search_chats", "use_skill", "save_skill"];
+        const ALWAYS: &[&str] = &["memory", "search_chats", "use_skill", "save_skill", "about_iris"];
         let first: Vec<String> = specs_for(&[]).into_iter().map(|s| s.name).collect();
         assert_eq!(first, ALWAYS);
         assert_eq!(names(&["files"]), vec!["list_files", "view_image", "read_file", "write_file"]);
@@ -843,8 +854,8 @@ mod tests {
 
     #[test]
     fn team_specs() {
-        // After memory, search_chats, use_skill and save_skill.
-        let names: Vec<String> = specs_for(&["team".to_string()]).into_iter().map(|s| s.name).skip(4).collect();
+        // After memory, search_chats, use_skill, save_skill and about_iris.
+        let names: Vec<String> = specs_for(&["team".to_string()]).into_iter().map(|s| s.name).skip(5).collect();
         assert_eq!(names, TEAM_FUNCTIONS.iter().map(|s| s.to_string()).collect::<Vec<_>>());
         assert!(needs_approval("dismiss_agent"));
         assert!(!needs_approval("delegate_task"));

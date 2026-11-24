@@ -99,19 +99,31 @@ pub async fn compact(
         name = agent.name,
     );
     st.set_activity(thread_id, "compacting", "");
+    let progress = |active: bool, summarized: usize| {
+        st.emit(Event::Compacting { agent_id: agent.id.clone(), thread_id: thread_id.to_owned(), active, summarized })
+    };
+    progress(true, 0);
     let messages = [ChatMessage::new(Role::User, prompt)];
     let opts = ChatOptions { max_tokens: Some(2500), reasoning: Reasoning::Off, ..Default::default() };
-    let done = client.stream_chat(model, &messages, &opts, |_| {}).await.map_err(|e| e.to_string())?;
+    let done = match client.stream_chat(model, &messages, &opts, |_| {}).await {
+        Ok(done) => done,
+        Err(e) => {
+            progress(false, 0);
+            return Err(e.to_string());
+        }
+    };
     let tokens = done.usage.as_ref().map_or(0, |u| i64::from(u.prompt_tokens) + i64::from(u.completion_tokens));
     let _ = st.store.add_usage(tokens);
     let summary = done.content.trim();
     if summary.is_empty() {
+        progress(false, 0);
         return Err("the model returned an empty summary".into());
     }
     let until = old.last().map(|m| m.created_at).unwrap_or(thread.summary_until);
     if let Ok(Some(thread)) = st.store.set_summary(thread_id, summary, until) {
         st.emit(Event::ThreadUpdated { thread });
     }
+    progress(false, old.len());
     info!("compacted {}'s chat: {} messages into a summary ({tokens} tokens)", agent.name, old.len());
     Ok(true)
 }
@@ -132,5 +144,150 @@ mod tests {
         assert_eq!(threshold("deepseek-flash", None), MAX_BEFORE_COMPACT);
         assert_eq!(threshold("some-local-model", None), UNKNOWN_WINDOW * 6 / 10);
         assert_eq!(threshold("some-local-model", Some(8_000)), 4_800);
+    }
+
+    // ---- end to end, against a fake model server ----
+
+    use std::sync::{Arc, Mutex, RwLock, atomic::AtomicBool};
+
+    use iris_core::{MessageResult, NewAgent, Store};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    fn state() -> AppState {
+        let dir = std::env::temp_dir().join(format!("iris-compact-{}", uuid::Uuid::new_v4().simple()));
+        std::fs::create_dir_all(&dir).unwrap();
+        AppState {
+            store: Arc::new(Store::open_in_memory().unwrap()),
+            providers: Arc::new(RwLock::new(crate::providers::Providers::from_config(&[]))),
+            data_dir: Arc::new(dir),
+            events: tokio::sync::broadcast::channel(64).0,
+            runs: Arc::default(),
+            approvals: Arc::new(Mutex::new(Default::default())),
+            followups: Arc::default(),
+            http: reqwest::Client::new(),
+            search: Arc::default(),
+            defaults: Arc::default(),
+            limits: Arc::default(),
+            style: Arc::default(),
+            local_device_id: Arc::new(None),
+            started: std::time::Instant::now(),
+            browser: Arc::default(),
+            online: Arc::new(AtomicBool::new(true)),
+            link: Arc::new(crate::link::Link::new(
+                crate::link::Identity::from_secret(p256::SecretKey::random(&mut rand_core::OsRng)),
+                crate::link::LinkConfig::default(),
+            )),
+            queues: Arc::default(),
+            mcp: Arc::default(),
+        }
+    }
+
+    /// A chat of `turns` question/answer pairs; the last answer says how full the context was.
+    fn chat(st: &AppState, turns: usize, context: i64) -> (Agent, String) {
+        let agent = st.store.create_agent(serde_json::from_value::<NewAgent>(serde_json::json!({ "name": "Tester" })).unwrap()).unwrap();
+        let thread = st.store.create_thread(&agent.id, "chat").unwrap();
+        for i in 0..turns {
+            st.store.insert_message(&thread.id, MessageRole::User, &format!("question {i}"), MessageStatus::Complete, None).unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(2));
+            let m = st.store.insert_message(&thread.id, MessageRole::Assistant, "", MessageStatus::Streaming, None).unwrap();
+            st.store
+                .finish_message(&m.id, &MessageResult {
+                    content: format!("answer {i}"),
+                    reasoning: String::new(),
+                    rounds: vec![],
+                    status: MessageStatus::Complete,
+                    error: None,
+                    model: None,
+                    prompt_tokens: None,
+                    completion_tokens: None,
+                    context_tokens: (i + 1 == turns).then_some(context),
+                })
+                .unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        (agent, thread.id)
+    }
+
+    /// Answers one chat request with a streamed summary; returns what was asked.
+    async fn fake_model() -> (OpenAiCompatible, tokio::task::JoinHandle<String>) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(async move {
+            let (mut sock, _) = listener.accept().await.unwrap();
+            let mut req = Vec::new();
+            let mut buf = [0u8; 8192];
+            loop {
+                let n = sock.read(&mut buf).await.unwrap();
+                req.extend_from_slice(&buf[..n]);
+                let text = String::from_utf8_lossy(&req).to_string();
+                if let Some(head_end) = text.find("\r\n\r\n") {
+                    let len = text[..head_end]
+                        .lines()
+                        .find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap()))
+                        .unwrap_or(0);
+                    if req.len() >= head_end + 4 + len {
+                        break;
+                    }
+                }
+                if n == 0 {
+                    break;
+                }
+            }
+            let body = "data: {\"choices\":[{\"delta\":{\"content\":\"- The user asked ten questions.\"}}]}\n\n\
+                        data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":120,\"completion_tokens\":8}}\n\n\
+                        data: [DONE]\n\n";
+            let reply = format!("HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\nconnection: close\r\n\r\n{body}");
+            sock.write_all(reply.as_bytes()).await.unwrap();
+            String::from_utf8_lossy(&req).into_owned()
+        });
+        (OpenAiCompatible::new(format!("http://127.0.0.1:{port}/v1"), Some("k".to_owned())), server)
+    }
+
+    #[tokio::test]
+    async fn compacting_on_demand_summarizes_the_older_messages() {
+        let st = state();
+        let (agent, thread_id) = chat(&st, 10, 1_000);
+        let (client, server) = fake_model().await;
+        let mut events = st.events.subscribe();
+        assert!(compact(&st, &agent, &thread_id, &client, "deepseek-flash", true).await.unwrap());
+
+        let asked = server.await.unwrap();
+        assert!(asked.contains("question 0") && asked.contains("answer 0"), "the oldest messages are summarized");
+        assert!(!asked.contains("question 9"), "the latest messages stay word for word");
+        let thread = st.store.get_thread(&thread_id).unwrap().unwrap();
+        assert_eq!(thread.summary, "- The user asked ten questions.");
+        let all = st.store.list_messages(&thread_id).unwrap();
+        assert_eq!(all.len(), 20, "the messages themselves stay");
+        let kept = all.iter().filter(|m| m.created_at > thread.summary_until).count();
+        assert!((KEEP_RECENT..=KEEP_RECENT + 1).contains(&kept), "kept {kept}");
+        assert_eq!(all.iter().find(|m| m.created_at > thread.summary_until).unwrap().role, MessageRole::User);
+        // The app hears about it: "compacting" while it works, then the updated chat.
+        // (No reply is running here, as with the menu item or /compact: it's still announced.)
+        let mut seen = vec![];
+        while let Ok(e) = events.try_recv() {
+            match e {
+                Event::Compacting { thread_id: t, active, summarized, .. } if t == thread_id => seen.push(format!("compacting {active} {summarized}")),
+                Event::ThreadUpdated { thread } if thread.id == thread_id => seen.push("updated".into()),
+                _ => {}
+            }
+        }
+        assert_eq!(seen.first().map(String::as_str), Some("compacting true 0"), "{seen:?}");
+        assert!(seen.contains(&"updated".to_string()), "{seen:?}");
+        assert!(seen.last().unwrap().starts_with("compacting false ") && !seen.last().unwrap().ends_with(" 0"), "{seen:?}");
+    }
+
+    #[tokio::test]
+    async fn compacts_by_itself_at_the_ceiling_and_not_before() {
+        let st = state();
+        let ceiling = threshold("deepseek-flash", None) as i64;
+        let (agent, quiet) = chat(&st, 10, ceiling - 1);
+        let unused = OpenAiCompatible::new("http://127.0.0.1:9/v1", None);
+        assert!(!compact(&st, &agent, &quiet, &unused, "deepseek-flash", false).await.unwrap(), "below the ceiling: nothing to do");
+
+        let (agent, full) = chat(&st, 10, ceiling);
+        let (client, server) = fake_model().await;
+        assert!(compact(&st, &agent, &full, &client, "deepseek-flash", false).await.unwrap(), "at the ceiling it compacts");
+        server.await.unwrap();
+        assert!(!st.store.get_thread(&full).unwrap().unwrap().summary.is_empty());
     }
 }

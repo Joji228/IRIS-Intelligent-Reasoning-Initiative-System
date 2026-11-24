@@ -430,6 +430,8 @@ export type IrisEvent =
   | ({ type: 'run_started' } & RunInfo)
   | ({ type: 'run_finished'; status: MessageStatus } & RunInfo)
   | { type: 'run_activity'; agent_id: string; thread_id: string; activity: string; detail?: string }
+  /** A chat is being compacted (`active`), or finished with `summarized` older messages (0 = it failed). */
+  | { type: 'compacting'; agent_id: string; thread_id: string; active: boolean; summarized: number }
   | { type: 'approval_requested'; approval: PendingApproval }
   | { type: 'problems_changed' }
   | { type: 'approval_resolved'; approval_id: string; agent_id: string; approved: boolean }

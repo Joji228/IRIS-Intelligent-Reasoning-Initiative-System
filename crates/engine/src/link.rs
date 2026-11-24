@@ -81,7 +81,7 @@ fn from_b64url(s: &str) -> Option<Vec<u8>> {
 }
 
 impl Identity {
-    fn from_secret(secret: SecretKey) -> Self {
+    pub(crate) fn from_secret(secret: SecretKey) -> Self {
         let public = b64url(secret.public_key().to_encoded_point(false).as_bytes());
         Self { secret, public }
     }

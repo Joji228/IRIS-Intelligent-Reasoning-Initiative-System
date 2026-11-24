@@ -448,7 +448,23 @@ private fun CodeBox(text: String, maxHeight: Int) {
     }
 }
 
-/** Iris's behind-the-scenes work folded into one box with a live status line. */
+/** Step names in words, for the work card's tally. */
+private val WORK_KINDS = mapOf(
+    "run_command" to ("command" to "commands"),
+    "write_file" to ("file written" to "files written"),
+    "code_write" to ("file written" to "files written"),
+    "code_edit" to ("edit" to "edits"),
+    "read_file" to ("file read" to "files read"),
+    "code_read" to ("file read" to "files read"),
+    "list_files" to ("folder listed" to "folders listed"),
+    "web_search" to ("search" to "searches"),
+    "web_fetch" to ("page read" to "pages read"),
+    "browser_open" to ("page opened" to "pages opened"),
+    "browser_read" to ("page read" to "pages read"),
+    "search_chats" to ("chat search" to "chat searches"),
+)
+
+/** An agent's behind-the-scenes work (or Iris's team) folded into one box with a live status line. */
 @Composable
 private fun WorkCard(vm: IrisViewModel, rounds: List<Round>, live: Boolean) {
     var open by remember { mutableStateOf(false) }
@@ -466,9 +482,16 @@ private fun WorkCard(vm: IrisViewModel, rounds: List<Round>, live: Boolean) {
     val lastStep = steps.lastOrNull()
     val active = live || waitingOn != null || workingOn.isNotEmpty()
     val names = helpers.joinToString(", ") { it.first }
-    val title = if (helpers.isNotEmpty()) {
-        "$names ${if (active) (if (helpers.size > 1) "are" else "is") + " on it" else if (helpers.size > 1) "helped" else "helped out"}"
-    } else lastStep?.summary ?: "Working…"
+    // What the steps were, in words: "9 commands, 1 file written, 2 searches" (as on the desktop).
+    val tally = steps.groupBy { WORK_KINDS[it.name] ?: ("other step" to "other steps") }
+        .entries.joinToString(", ") { (kind, list) -> "${list.size} ${if (list.size == 1) kind.first else kind.second}" }
+    val failed = steps.count { it.status == "error" || it.status == "denied" }
+    val title = when {
+        helpers.isNotEmpty() ->
+            "$names ${if (active) (if (helpers.size > 1) "are" else "is") + " on it" else if (helpers.size > 1) "helped" else "helped out"}"
+        active || steps.size == 1 -> lastStep?.summary ?: "Working…"
+        else -> "Worked through ${steps.size} steps"
+    }
     val status = when {
         waitingOn != null -> "${waitingOn.first} needs your approval"
         workingOn.isNotEmpty() -> {
@@ -476,9 +499,10 @@ private fun WorkCard(vm: IrisViewModel, rounds: List<Round>, live: Boolean) {
             val what = a?.let { vm.activityOf(it.id) }
             "$name is working${if (what != null && what != "thinking") " · ${what.replace('_', ' ')}" else "…"}"
         }
+        live && helpers.isEmpty() -> "${steps.size} ${if (steps.size == 1) "step" else "steps"} so far · $tally"
         live -> lastStep?.summary ?: "Working…"
-        helpers.isEmpty() && steps.size == 1 -> "Done"
-        helpers.isEmpty() -> "${steps.size} steps · tap to see them"
+        helpers.isEmpty() && steps.size == 1 -> if (failed > 0) "Failed" else "Done"
+        helpers.isEmpty() -> tally + if (failed > 0) " · $failed failed" else ""
         else -> "${steps.size} ${if (steps.size == 1) "step" else "steps"}"
     }
 

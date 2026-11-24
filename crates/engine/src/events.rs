@@ -52,6 +52,10 @@ pub enum Event {
     /// What an agent is doing right now: "thinking", "waiting", or a tool name,
     /// and the step in words (`detail`, empty while thinking).
     RunActivity { agent_id: String, thread_id: String, activity: String, detail: String },
+    /// A chat is being compacted (`active`), or finished: `summarized` older
+    /// messages went into its summary (0 when it failed). Sent whether or not a
+    /// reply is running, so the app can show it either way.
+    Compacting { agent_id: String, thread_id: String, active: bool, summarized: usize },
     ApprovalRequested { approval: PendingApproval },
     /// The problems inbox changed; refetch `/v1/problems`.
     ProblemsChanged,

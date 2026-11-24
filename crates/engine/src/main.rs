@@ -11,6 +11,7 @@ mod config;
 mod design;
 mod develop;
 mod events;
+mod guide;
 mod link;
 mod mcp;
 mod memory;

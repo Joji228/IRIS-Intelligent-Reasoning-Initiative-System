@@ -92,6 +92,8 @@ class IrisViewModel(app: Application) : AndroidViewModel(app) {
     val agents = mutableStateListOf<Agent>()
     /** Replies in progress, by thread. */
     val running = mutableStateMapOf<String, RunInfo>()
+    /** Chats being compacted right now, by thread id. */
+    val compacting = mutableStateMapOf<String, Boolean>()
     val approvals = mutableStateMapOf<String, PendingApproval>()
     val queues = mutableStateMapOf<String, List<QueuedMessage>>()
     val recent = mutableStateListOf<Thread>()
@@ -596,14 +598,17 @@ class IrisViewModel(app: Application) : AndroidViewModel(app) {
         showToast("${agent(agentId)?.name ?: "The"} chat cleared")
     }
 
+    // The engine announces the start and the result (the "compacting" event).
+    // An older engine doesn't announce it, so then the result is confirmed here.
+    private var compactAnnounced = 0
     fun compactChat(agentId: String) = launchCatching {
-        showToast("Compacting…")
+        val announced = compactAnnounced
         val detail = api?.compactChat(agentId) ?: return@launchCatching
         if (thread?.agentId == agentId) {
             thread = detail.thread
             replaceAll(messages, detail.messages)
         }
-        showToast("Chat compacted: older messages are summarized")
+        if (compactAnnounced == announced) showToast("Chat compacted: older messages are summarized")
     }
 
     fun deleteAgent(agentId: String) = launchCatching {
@@ -712,6 +717,16 @@ class IrisViewModel(app: Application) : AndroidViewModel(app) {
                 val activity = e.str("activity")
                 running[tid]?.let { running[tid] = it.copy(activity = activity, detail = e.str("detail").orEmpty()) }
                 if (activity == "delegate_task" || activity == "create_agent") setMood(e.str("agent_id").orEmpty(), "spin", 1100)
+            }
+            "compacting" -> {
+                compactAnnounced++
+                val tid = e.str("thread_id") ?: return
+                if (e.str("active") == "true") compacting[tid] = true
+                else {
+                    compacting.remove(tid)
+                    val n = e.str("summarized")?.toIntOrNull() ?: 0
+                    if (n > 0) showToast("${agent(e.str("agent_id").orEmpty())?.name ?: "The agent"}'s chat was compacted · $n older ${if (n == 1) "message" else "messages"} summarized")
+                }
             }
             "run_finished" -> {
                 e.str("thread_id")?.let { running.remove(it) }

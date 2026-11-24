@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowUp, FileText, LoaderCircle, Mic, Plus, Square, Telescope, X } from '@lucide/svelte';
+  import { Archive, ArrowUp, FileText, LoaderCircle, Mic, Plus, Square, Telescope, X } from '@lucide/svelte';
   import { app } from '../app.svelte';
   import { inWebLink } from '../connection';
   import { tip } from '../tooltip';
@@ -115,9 +115,31 @@
     input.style.height = `${Math.min(input.scrollHeight, 240)}px`;
   }
 
+  // Slash commands: typed in the box, run by the app instead of being sent.
+  const COMMANDS = [{ name: '/compact', hint: 'Summarize older messages now, to free up context', icon: Archive }];
+  const suggestions = $derived(
+    text.startsWith('/') && !/\s/.test(text.trim()) ? COMMANDS.filter((c) => c.name.startsWith(text.trim().toLowerCase())) : [],
+  );
+  let picked = $state(0);
+  $effect(() => {
+    if (picked >= suggestions.length) picked = 0;
+  });
+
+  function runCommand(name: string) {
+    text = '';
+    queueMicrotask(autosize);
+    const agent = app.currentAgent;
+    if (name === '/compact' && agent) void app.compactChat(agent.id);
+  }
+
   async function submit() {
     const value = text.trim();
     if ((!value && files.length === 0) || disabled) return;
+    const command = COMMANDS.find((c) => c.name === value.toLowerCase());
+    if (command && files.length === 0) {
+      runCommand(command.name);
+      return;
+    }
     const sending = files;
     const deep = research && !!value;
     if (voice.recording) voice.cancel();
@@ -137,6 +159,18 @@
   }
 
   function onkeydown(e: KeyboardEvent) {
+    if (suggestions.length && !e.isComposing) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        picked = (picked + (e.key === 'ArrowDown' ? 1 : suggestions.length - 1)) % suggestions.length;
+        return;
+      }
+      if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+        e.preventDefault();
+        runCommand(suggestions[picked].name);
+        return;
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
       e.preventDefault();
       submit();
@@ -150,6 +184,24 @@
   {ondrop}
   ondragover={(e) => e.preventDefault()}
 >
+  {#if suggestions.length}
+    <!-- Slash commands (Enter or Tab runs the highlighted one) -->
+    <div class="absolute right-3 bottom-full left-3 mb-2 overflow-hidden rounded-2xl border border-line-strong bg-elevated p-1 shadow-[var(--shadow-pop)] animate-pop-in" role="listbox">
+      {#each suggestions as c, i (c.name)}
+        <button
+          class="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left {i === picked ? 'bg-hover' : 'hover:bg-hover/60'}"
+          role="option"
+          aria-selected={i === picked}
+          onmousedown={(e) => e.preventDefault()}
+          onclick={() => runCommand(c.name)}
+        >
+          <c.icon size={15} class="shrink-0 text-accent-hi" />
+          <span class="font-mono text-[13px] text-text">{c.name}</span>
+          <span class="min-w-0 truncate text-[12px] text-faint">{c.hint}</span>
+        </button>
+      {/each}
+    </div>
+  {/if}
   {#if files.length}
     <div class="flex flex-wrap gap-2 px-3 pt-3">
       {#each files as f, i (i)}

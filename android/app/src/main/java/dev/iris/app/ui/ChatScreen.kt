@@ -143,6 +143,19 @@ fun ChatScreen(vm: IrisViewModel, agent: Agent) {
             }
         }
 
+        // Compaction in progress (on its own at the limit, or from /compact or the menu).
+        AnimatedVisibility(threadId != null && vm.compacting[threadId] == true, enter = fadeIn(), exit = fadeOut()) {
+            Box(Modifier.fillMaxWidth().padding(top = 6.dp), contentAlignment = Alignment.Center) {
+                Row(
+                    Modifier.background(C.accentSoft, RoundedCornerShape(50)).border(1.dp, C.accent.copy(alpha = 0.3f), RoundedCornerShape(50))
+                        .padding(horizontal = 14.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Spinner(13.dp)
+                    Shimmer("Compacting the chat · summarizing older messages", 12.5.sp, FontWeight.Normal)
+                }
+            }
+        }
         Composer(vm, agent, draft, { draft = it }, running, enabled = vm.conn == Conn.Online)
     }
 }
@@ -306,7 +319,7 @@ private fun BoxScope.Messages(vm: IrisViewModel, agent: Agent, fill: (String) ->
                         verticalArrangement = Arrangement.spacedBy(20.dp),
                     ) {
                         if (i == 0 || startOfDay(messages[i - 1].createdAt) != startOfDay(m.createdAt)) DayDivider(m.createdAt)
-                        if (i == firstKept) CompactedDivider(vm.thread?.summary.orEmpty())
+                        if (i == firstKept) CompactedDivider(vm.thread?.summary.orEmpty(), firstKept)
                         MessageItem(vm, m, agent, i == n - 1)
                     }
                 }
@@ -400,12 +413,21 @@ private fun BoxScope.EmptyChat(vm: IrisViewModel, agent: Agent, fill: (String) -
 }
 
 @Composable
-private fun CompactedDivider(summary: String) {
+private fun CompactedDivider(summary: String, before: Int) {
     var open by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Pill(Modifier.press { open = !open }) {
-            Icon(Lucide.Archive, C.faint, 12.dp)
-            Txt("Earlier messages were compacted · ${if (open) "hide" else "show"} summary", 11.5.sp, C.faint)
+        // A full-width divider in the accent color, so it's easy to spot.
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(Modifier.weight(1f).height(1.dp).background(C.accent.copy(alpha = 0.35f)))
+            Row(
+                Modifier.clip(RoundedCornerShape(50)).press { open = !open }.background(C.accentSoft)
+                    .border(1.dp, C.accent.copy(alpha = 0.35f), RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(Lucide.Archive, C.accentHi, 13.dp)
+                Txt("Compacted · $before earlier · ${if (open) "hide" else "show"}", 12.sp, C.accentHi, FontWeight.Medium)
+            }
+            Box(Modifier.weight(1f).height(1.dp).background(C.accent.copy(alpha = 0.35f)))
         }
         AnimatedVisibility(open) {
             Box(Modifier.fillMaxWidth().background(C.surface, RoundedCornerShape(14.dp)).padding(14.dp)) {
@@ -484,6 +506,12 @@ private fun Composer(
     fun submit() {
         if (!canSend) return
         val typed = text.trim()
+        // Slash commands run here instead of being sent.
+        if (typed.equals("/compact", ignoreCase = true) && files.isEmpty()) {
+            onText("")
+            vm.compactChat(agent.id)
+            return
+        }
         val body = if (research && typed.isNotEmpty()) "${Prefixes.RESEARCH} $typed" else typed
         val sendingFiles = files.toList()
         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -506,6 +534,21 @@ private fun Composer(
             .background(C.surface, shape).border(1.dp, edge, shape).padding(5.dp)
             .animateContentSize(Motion.standard()),
     ) {
+        // Slash commands: "/" shows what can be typed; a tap runs it.
+        val typedCommand = text.trim().lowercase()
+        if (typedCommand.startsWith("/") && "/compact".startsWith(typedCommand) && files.isEmpty()) {
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).press {
+                    onText("")
+                    vm.compactChat(agent.id)
+                }.background(C.elevated).padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Icon(Lucide.Archive, C.accentHi, 15.dp)
+                Txt("/compact", 13.5.sp, C.text, mono = true)
+                Txt("Summarize older messages now", 12.5.sp, C.faint, maxLines = 1, modifier = Modifier.weight(1f))
+            }
+        }
         if (files.isNotEmpty() || reading > 0) {
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 6.dp, end = 6.dp, top = 6.dp, bottom = 4.dp),

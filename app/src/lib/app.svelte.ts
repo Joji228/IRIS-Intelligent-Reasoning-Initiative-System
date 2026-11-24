@@ -140,6 +140,10 @@ class IrisApp {
   recent = $state<Thread[]>([]);
   /** Replies being generated, by thread id. */
   running = $state<Record<string, RunInfo>>({});
+  /** Chats being compacted right now, by thread id. */
+  compacting = $state<Record<string, boolean>>({});
+  /** Counts 'compacting' events, to tell whether the engine announces compactions. */
+  private compactAnnounced = 0;
   /** Tool calls waiting for the user, by approval id. */
   approvals = $state<Record<string, PendingApproval>>({});
   toolsets = $state<Toolset[]>([]);
@@ -861,13 +865,15 @@ class IrisApp {
   async compactChat(agentId: string) {
     if (!this.api) return;
     try {
-      this.toast('Compacting…');
+      // The engine announces the start and the result (see the 'compacting' event);
+      // an older engine doesn't, so then the result is confirmed here.
+      const announced = this.compactAnnounced;
       const detail = await this.api.compactChat(agentId);
       if (this.view.kind === 'agent' && this.view.agentId === agentId) {
         this.thread = detail.thread;
         this.messages = detail.messages;
       }
-      this.toast('Chat compacted: older messages are summarized');
+      if (this.compactAnnounced === announced) this.toast('Chat compacted: older messages are summarized');
     } catch (e) {
       this.error(e);
     }
@@ -1147,6 +1153,20 @@ class IrisApp {
         }
         // Handing out work: a happy little spin.
         if (e.activity === 'delegate_task' || e.activity === 'create_agent') this.setMood(e.agent_id, 'spin', 1100);
+        break;
+      }
+      case 'compacting': {
+        this.compactAnnounced++;
+        if (e.active) {
+          this.compacting[e.thread_id] = true;
+        } else {
+          delete this.compacting[e.thread_id];
+          const name = this.agent(e.agent_id)?.name ?? 'The agent';
+          if (e.summarized > 0) {
+            // (The new summary itself arrives with 'thread_updated'.)
+            this.toast(`${name}'s chat was compacted · ${e.summarized} older ${e.summarized === 1 ? 'message' : 'messages'} summarized`);
+          }
+        }
         break;
       }
       case 'problems_changed':

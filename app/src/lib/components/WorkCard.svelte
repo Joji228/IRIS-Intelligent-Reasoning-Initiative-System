@@ -1,8 +1,8 @@
 <script lang="ts">
-  // Iris's behind-the-scenes work (checking the team, creating agents, handing
-  // out tasks, waiting on them) folded into one small box with a live status
-  // line. Click it to see every step.
-  import { ChevronRight, LoaderCircle, ShieldAlert, Users } from '@lucide/svelte';
+  // An agent's behind-the-scenes work (commands, files, searches, or for Iris
+  // the team: creating agents, handing out tasks, waiting on them) folded into
+  // one small box with a live status line. Click it to see every step.
+  import { ChevronRight, LoaderCircle, ShieldAlert, Users, Wrench } from '@lucide/svelte';
   import { app } from '../app.svelte';
   import type { Round } from '../types';
   import AgentAvatar from './AgentAvatar.svelte';
@@ -38,12 +38,41 @@
   const workingOn = $derived(helpers.filter((h) => h.agent && app.isWorking(h.agent.id)));
   const lastStep = $derived(steps[steps.length - 1]);
 
+  // What the steps were, in words: "9 commands, 1 file written, 2 searches".
+  const KINDS: Record<string, [string, string]> = {
+    run_command: ['command', 'commands'],
+    write_file: ['file written', 'files written'],
+    code_write: ['file written', 'files written'],
+    code_edit: ['edit', 'edits'],
+    read_file: ['file read', 'files read'],
+    code_read: ['file read', 'files read'],
+    list_files: ['folder listed', 'folders listed'],
+    web_search: ['search', 'searches'],
+    web_fetch: ['page read', 'pages read'],
+    browser_open: ['page opened', 'pages opened'],
+    browser_read: ['page read', 'pages read'],
+    search_chats: ['chat search', 'chat searches'],
+  };
+  const tally = $derived.by(() => {
+    const counts = new Map<string, [number, [string, string]]>();
+    for (const s of steps) {
+      const kind = KINDS[s.name] ?? ['other step', 'other steps'];
+      const key = kind[0];
+      counts.set(key, [(counts.get(key)?.[0] ?? 0) + 1, kind]);
+    }
+    return [...counts.values()].map(([n, [one, many]]) => `${n} ${n === 1 ? one : many}`).join(', ');
+  });
+  const failed = $derived(steps.filter((s) => s.status === 'error' || s.status === 'denied').length);
   // Still going: this reply is streaming, or a helper it started is busy.
   const active = $derived(live || !!waitingOn || workingOn.length > 0);
   const title = $derived(
     helpers.length
       ? `${helpers.map((h) => h.name).join(', ')} ${active ? (helpers.length > 1 ? 'are' : 'is') + ' on it' : helpers.length > 1 ? 'helped' : 'helped out'}`
-      : (lastStep?.summary ?? 'Working…'),
+      : active
+        ? (lastStep?.summary ?? 'Working…')
+        : steps.length === 1
+          ? (lastStep?.summary ?? 'Done')
+          : `Worked through ${steps.length} steps`,
   );
   const status = $derived.by(() => {
     if (waitingOn) return `${waitingOn.name} needs your approval`;
@@ -52,9 +81,9 @@
       const what = h.agent ? app.activityOf(h.agent.id) : '';
       return `${h.name} is working${what && what !== 'thinking' ? ` · ${what.replace(/_/g, ' ')}` : '…'}`;
     }
-    if (live) return lastStep?.summary ?? 'Working…';
-    if (!helpers.length && steps.length === 1) return 'Done';
-    if (!helpers.length) return `${steps.length} steps · click to see them`;
+    if (live) return helpers.length ? (lastStep?.summary ?? 'Working…') : `${steps.length} ${steps.length === 1 ? 'step' : 'steps'} so far · ${tally}`;
+    if (!helpers.length && steps.length === 1) return failed ? 'Failed' : 'Done';
+    if (!helpers.length) return `${tally}${failed ? ` · ${failed} failed` : ''}`;
     return `${steps.length} ${steps.length === 1 ? 'step' : 'steps'}`;
   });
 </script>
@@ -77,7 +106,7 @@
         {/each}
       </span>
     {:else}
-      <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent-hi"><Users size={13} /></span>
+      <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent-hi"><Wrench size={13} /></span>
     {/if}
     <span class="min-w-0 flex-1">
       <span class="block truncate text-[13px] font-medium text-text">{title}</span>

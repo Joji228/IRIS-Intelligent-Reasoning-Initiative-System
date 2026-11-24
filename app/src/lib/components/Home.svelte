@@ -1,5 +1,7 @@
 <script lang="ts">
   import { ArrowRight, Check, Plus, ShieldAlert, TriangleAlert, X } from '@lucide/svelte';
+  import { tick } from 'svelte';
+  import { flip } from 'svelte/animate';
   import { app } from '../app.svelte';
   import { greeting, relativeTime } from '../time';
   import AgentAvatar from './AgentAvatar.svelte';
@@ -7,6 +9,82 @@
 
   const workingCount = $derived(app.agents.filter((a) => app.isWorking(a.id)).length);
   const lastActivity = (agentId: string) => app.recent.find((t) => t.agent_id === agentId);
+
+  // ---- drag a card to reorder (Iris stays first; same order as the sidebar) ----
+  // Mouse and pen only: on a touch screen a press on a card has to scroll the
+  // page, so phones reorder from the sidebar.
+  const cards: Record<string, HTMLElement> = {};
+  let pressed: { id: string; x: number; y: number; gx: number; gy: number } | null = null;
+  let dragging = $state<string | null>(null);
+  let dragX = $state(0);
+  let dragY = $state(0);
+  let justDragged = false;
+
+  const centerOf = (id: string): [number, number] => {
+    const r = cards[id]?.getBoundingClientRect();
+    return r ? [r.left + r.width / 2, r.top + r.height / 2] : [0, 0];
+  };
+
+  function ondown(e: PointerEvent, id: string, main: boolean) {
+    if (e.button !== 0 || main || e.pointerType === 'touch') return;
+    const [cx, cy] = centerOf(id);
+    pressed = { id, x: e.clientX, y: e.clientY, gx: e.clientX - cx, gy: e.clientY - cy };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function follow(e: PointerEvent, id: string) {
+    const [cx, cy] = centerOf(id);
+    dragX = e.clientX - pressed!.gx - cx + dragX;
+    dragY = e.clientY - pressed!.gy - cy + dragY;
+  }
+
+  function onmove(e: PointerEvent) {
+    if (!pressed) return;
+    if (!dragging) {
+      if (Math.hypot(e.clientX - pressed.x, e.clientY - pressed.y) < 6) return;
+      dragging = pressed.id;
+    }
+    const id = dragging;
+    const ids = app.orderedAgents.filter((a) => a.role !== 'main').map((a) => a.id);
+    // The card (or the dragged card's own slot) nearest the pointer decides where it goes.
+    let best = id;
+    let bestDist = Infinity;
+    for (const other of ids) {
+      const [cx, cy] = other === id ? slotCenter(id) : centerOf(other);
+      const d = Math.hypot(e.clientX - cx, e.clientY - cy);
+      if (d < bestDist) {
+        bestDist = d;
+        best = other;
+      }
+    }
+    if (best !== id) {
+      const to = ids.indexOf(best);
+      const next = ids.filter((x) => x !== id);
+      next.splice(to, 0, id);
+      if (next.join() !== ids.join()) {
+        app.setOrbOrder(next);
+        // Measure after the reorder: the slot has moved under the card.
+        void tick().then(() => {
+          if (dragging === id && pressed) follow(e, id);
+        });
+      }
+    }
+    follow(e, id);
+  }
+
+  // Where the dragged card's slot is (its box minus how far it has been dragged).
+  function slotCenter(id: string): [number, number] {
+    const [cx, cy] = centerOf(id);
+    return [cx - dragX, cy - dragY];
+  }
+
+  function onup() {
+    justDragged = !!dragging;
+    pressed = null;
+    dragging = null;
+    dragX = 0;
+    dragY = 0;
+  }
 </script>
 
 <div class="h-full overflow-y-auto scroll-thin">
@@ -77,8 +155,24 @@
         {@const waiting = app.isWaiting(agent.id)}
         {@const last = lastActivity(agent.id)}
         <button
-          class="group flex flex-col rounded-2xl border border-line bg-surface p-4 text-left transition hover:-translate-y-0.5 hover:border-line-strong hover:shadow-[0_10px_30px_rgb(0_0_0/0.25)]"
-          onclick={() => app.openAgent(agent.id)}
+          bind:this={cards[agent.id]}
+          animate:flip={{ duration: agent.id === dragging ? 0 : 180 }}
+          class="group flex flex-col rounded-2xl border border-line bg-surface p-4 text-left {dragging === agent.id
+            ? 'relative z-10 scale-[1.03] cursor-grabbing border-accent/50 shadow-[0_18px_40px_rgb(0_0_0/0.4)] select-none'
+            : 'transition hover:-translate-y-0.5 hover:border-line-strong hover:shadow-[0_10px_30px_rgb(0_0_0/0.25)]'}"
+          style:translate={dragging === agent.id ? `${dragX}px ${dragY}px` : undefined}
+          onpointerdown={(e) => ondown(e, agent.id, agent.role === 'main')}
+          onpointermove={onmove}
+          onpointerup={onup}
+          onpointercancel={onup}
+          onclick={() => {
+            // The click that ends a drag doesn't open the chat.
+            if (justDragged) {
+              justDragged = false;
+              return;
+            }
+            app.openAgent(agent.id);
+          }}
           oncontextmenu={(e) => {
             e.preventDefault();
             app.openAgentMenu(agent, e.clientX, e.clientY);
