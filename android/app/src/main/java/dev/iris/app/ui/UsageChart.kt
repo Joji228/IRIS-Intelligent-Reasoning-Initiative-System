@@ -29,6 +29,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.iris.app.data.UsageDaily
@@ -100,7 +102,12 @@ fun UsageChart(data: UsageDaily, mode: String) {
                 Txt(parts.joinToString(" · "), 12.5.sp, C.muted)
             }
             if (pick.tokens > 0) {
-                Txt("${formatTokens(pick.cached)} cached · ${formatTokens(max(0L, pick.input - pick.cached))} new input · ${formatTokens(pick.output)} output", 11.5.sp, C.faint)
+                // Older replies didn't record how much input came from the cache.
+                Txt(
+                    if (pick.estimated) "${formatTokens(pick.input)} input · ${formatTokens(pick.output)} output · cache split not recorded"
+                    else "${formatTokens(pick.cached)} cached · ${formatTokens(max(0L, pick.input - pick.cached))} new input · ${formatTokens(pick.output)} output",
+                    11.5.sp, C.faint,
+                )
             }
         }
         // The chart.
@@ -144,12 +151,21 @@ fun UsageChart(data: UsageDaily, mode: String) {
                     }
                 }
             }
-            // A few day labels under the bars.
+            // A few day labels under the bars, placed by position (the end ones hug the edges).
             val every = when { days.size > 45 -> 14; days.size > 20 -> 7; days.size > 10 -> 3; else -> 1 }
-            Row(Modifier.fillMaxWidth().align(Alignment.BottomStart)) {
-                days.forEachIndexed { i, d ->
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                        if (i % every == days.lastIndex % every) Txt(dayLabel(d.day, false), 9.5.sp, C.faint, maxLines = 1)
+            val shown = days.indices.filter { it % every == days.lastIndex % every }
+            Layout(
+                content = { shown.forEach { i -> Txt(dayLabel(days[i].day, false), 9.5.sp, C.faint, maxLines = 1) } },
+                modifier = Modifier.fillMaxWidth().align(Alignment.BottomStart),
+            ) { measurables, constraints ->
+                val placeables = measurables.map { it.measure(Constraints()) }
+                val w = constraints.maxWidth
+                val slot = w.toFloat() / days.size
+                val h = placeables.maxOfOrNull { it.height } ?: 0
+                layout(w, h) {
+                    placeables.forEachIndexed { k, p ->
+                        val cx = (shown[k] * slot + slot / 2).toInt()
+                        p.place((cx - p.width / 2).coerceIn(0, (w - p.width).coerceAtLeast(0)), 0)
                     }
                 }
             }

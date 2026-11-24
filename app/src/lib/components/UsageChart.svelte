@@ -155,8 +155,13 @@
             .join(' · ')}
         </span>
         {#if pick.tokens}
+          <!-- Older replies didn't record how much input came from the cache -->
           <span class="ml-auto hidden text-[11.5px] text-faint tabular-nums sm:inline">
-            {formatTokens(pick.cached)} cached · {formatTokens(Math.max(0, pick.input - pick.cached))} new input · {formatTokens(pick.output)} output
+            {#if pick.estimated}
+              {formatTokens(pick.input)} input · {formatTokens(pick.output)} output · cache split not recorded
+            {:else}
+              {formatTokens(pick.cached)} cached · {formatTokens(Math.max(0, pick.input - pick.cached))} new input · {formatTokens(pick.output)} output
+            {/if}
           </span>
         {/if}
       {/if}
