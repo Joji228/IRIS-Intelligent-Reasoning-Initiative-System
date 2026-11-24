@@ -157,7 +157,8 @@ fun AgentEditScreen(vm: IrisViewModel, agent: Agent) {
                     Hint("Iris has every ability: $BUILT_IN_ABILITIES, plus files and computer control. Risky steps still ask you.")
                 } else {
                     for (g in ABILITY_GROUPS) {
-                        val on = g.tools.all { it in tools }
+                        // On when any of its tools is (older agents may have shell without system).
+                        val on = g.tools.any { it in tools }
                         SwitchRow(g.name, g.description, on, { want ->
                             tools = if (want) (tools + g.tools).distinct() else tools - g.tools.toSet()
                         }, badge = if (g.asks) ({ Badge("Asks first", C.warn, Lucide.ShieldAlert) }) else null)

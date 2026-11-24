@@ -4,6 +4,7 @@ import android.app.Application
 import android.os.Build
 import android.provider.Settings
 import dev.iris.app.BuildConfig
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -53,6 +54,9 @@ object Prefixes {
     /** A turn spoken on a voice call (matches the engine's chat::VOICE_PREFIX). */
     const val VOICE = "[Voice call]"
     const val ROUTINE = "[Routine:"
+    /** Another agent handing this one a task (the engine's team.rs delegation). */
+    const val TASK = "[Task from "
+    const val OUTSIDE_NOTE = "[Note from I.R.I.S.: the agent that wrote this task had read"
 }
 
 class IrisViewModel(app: Application) : AndroidViewModel(app) {
@@ -117,6 +121,8 @@ class IrisViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var defaultModel by mutableStateOf<DefaultModel?>(null)
         private set
+    /** How hard agents without their own level think ("" until loaded). */
+    var reasoningDefault by mutableStateOf("")
     val providers = mutableStateListOf<Provider>()
     /** The providers that can be a chat model (Groq is for speech to text only). */
     val chatProviders: List<Provider> get() = providers.filter { !it.voiceOnly }
@@ -466,7 +472,12 @@ class IrisViewModel(app: Application) : AndroidViewModel(app) {
         stack.add(Screen.Home)
     }
 
+    /** Where the Settings list was scrolled, so coming back from a page keeps your place. */
+    var settingsScroll = LazyListState()
+        private set
+
     fun open(s: Screen) {
+        if (s == Screen.Settings() && stack.none { it is Screen.Settings }) settingsScroll = LazyListState()
         if (screen != s) stack.add(s)
     }
 
@@ -640,6 +651,7 @@ class IrisViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun loadModelSettings() {
         attempt { defaultModel() }?.let { defaultModel = it; contextWindow = it.contextWindow }
+        attempt { reasoning() }?.let { reasoningDefault = it.effort }
         attempt { providers() }?.let { replaceAll(providers, it) }
     }
 

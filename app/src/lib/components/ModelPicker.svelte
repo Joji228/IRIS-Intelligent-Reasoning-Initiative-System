@@ -58,7 +58,7 @@
 
 <div class="relative min-w-0" bind:this={root}>
   <button
-    class="flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] text-muted transition hover:bg-hover hover:text-text {open
+    class="flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] max-sm:px-2 text-muted transition hover:bg-hover hover:text-text {open
       ? 'bg-hover text-text'
       : ''}"
     onclick={() => (open = !open)}
@@ -67,12 +67,12 @@
     data-tip-side={below ? 'bottom' : 'top'}
     aria-expanded={open}
   >
-    <Cpu size={13} class="shrink-0" />
+    <Cpu size={13} class="shrink-0 max-sm:hidden" />
     <span class="truncate whitespace-nowrap max-sm:hidden">{label}</span>
     <span class="text-faint max-sm:hidden">·</span>
     <Brain size={13} class="shrink-0" />
     <span class="whitespace-nowrap">{reasoningLabel(effort)}</span>
-    <ChevronDown size={13} class="shrink-0 text-faint transition-transform {open ? 'rotate-180' : ''}" />
+    <ChevronDown size={13} class="shrink-0 text-faint transition-transform max-sm:hidden {open ? 'rotate-180' : ''}" />
   </button>
 
   {#if open}

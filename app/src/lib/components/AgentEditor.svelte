@@ -57,8 +57,10 @@
   let saving = $state(false);
   let confirmDelete = $state(false);
 
+  // On when any of its tools is (older agents may have only part of a group,
+  // e.g. shell without system); switching it off removes them all.
   function toggleGroup(ids: readonly string[]) {
-    const on = ids.every((t) => tools.includes(t));
+    const on = ids.some((t) => tools.includes(t));
     tools = on ? tools.filter((t) => !ids.includes(t)) : [...tools, ...ids.filter((t) => !tools.includes(t))];
   }
 
@@ -201,7 +203,7 @@
       {:else}
         <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {#each ABILITY_GROUPS as g (g.id)}
-            {@const on = g.tools.every((t) => tools.includes(t))}
+            {@const on = g.tools.some((t) => tools.includes(t))}
             <button
               class="flex items-start gap-3 rounded-xl border px-3 py-2.5 text-left transition {on
                 ? 'border-accent/55 bg-accent-soft'

@@ -153,14 +153,17 @@ private fun Header(vm: IrisViewModel, agent: Agent) {
     val overlays = LocalOverlays.current
     val working = vm.isWorking(agent.id)
     val waiting = vm.isWaiting(agent.id)
+    // The default effort, so the button shows the level the agent really uses ("High"), not "Auto".
+    LaunchedEffect(Unit) { if (vm.defaultModel == null || vm.reasoningDefault.isEmpty()) vm.loadModelSettings() }
+    // Compact buttons, so the agent's name has room on a phone.
     Row(
         Modifier.fillMaxWidth().height(66.dp).padding(start = 0.dp, end = 0.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(Lucide.ChevronLeft, { vm.back() }, C.muted, 26.dp)
-        AgentOrb(vm, agent, 38.dp)
-        Column(Modifier.weight(1f).padding(start = 10.dp, end = 6.dp)) {
-            Txt(agent.name, 16.sp, C.text, FontWeight.SemiBold, maxLines = 1)
+        IconButton(Lucide.ChevronLeft, { vm.back() }, C.muted, 26.dp, Modifier.size(36.dp))
+        AgentOrb(vm, agent, 30.dp)
+        Column(Modifier.weight(1f).padding(start = 8.dp, end = 6.dp)) {
+            Txt(agent.name, 15.5.sp, C.text, FontWeight.SemiBold, maxLines = 1)
             AnimatedContent(
                 when { waiting -> 1; working -> 2; else -> 0 },
                 transitionSpec = { (fadeIn(tween(200)) + slideInVertically { it / 2 }) togetherWith fadeOut(tween(120)) },
@@ -180,15 +183,15 @@ private fun Header(vm: IrisViewModel, agent: Agent) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Row(
-                Modifier.height(38.dp).clip(RoundedCornerShape(50)).press { modelSheet(vm, overlays, agent) }.padding(horizontal = 11.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp),
+                Modifier.height(38.dp).clip(RoundedCornerShape(50)).press { modelSheet(vm, overlays, agent) }.padding(horizontal = 6.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp),
             ) {
-                Icon(Lucide.Brain, C.muted, 16.dp)
-                Txt(reasoningLabel(agent.reasoningEffort), 12.sp, C.muted, FontWeight.Medium)
+                Icon(Lucide.Brain, C.muted, 14.dp)
+                Txt(reasoningLabel(agent.reasoningEffort.ifEmpty { vm.reasoningDefault }), 12.sp, C.muted, FontWeight.Medium)
             }
             val auto = autoMode(agent)
             Box(
-                Modifier.size(38.dp)
+                Modifier.size(34.dp)
                     .background(if (auto == "full") C.accent.copy(alpha = 0.22f) else androidx.compose.ui.graphics.Color.Transparent, CircleShape)
                     .press { autoSheet(vm, overlays, agent) },
                 contentAlignment = Alignment.Center,
@@ -200,7 +203,7 @@ private fun Header(vm: IrisViewModel, agent: Agent) {
             }
         }
         CallButton(vm, agent)
-        IconButton(Lucide.Ellipsis, { agentMenu(vm, overlays, agent, inChat = true) }, C.muted)
+        IconButton(Lucide.Ellipsis, { agentMenu(vm, overlays, agent, inChat = true) }, C.muted, modifier = Modifier.size(36.dp))
     }
 }
 

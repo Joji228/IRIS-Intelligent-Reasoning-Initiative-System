@@ -113,6 +113,10 @@ object Lucide {
     val CornerDownRight get() = icon("corner-down-right", "m15 10 5 5-5 5", "M4 4v7a4 4 0 0 0 4 4h12")
     val Ban get() = icon("ban", circle(12f, 12f, 10f), "m4.9 4.9 14.2 14.2")
     val Clock get() = icon("clock", circle(12f, 12f, 10f), "M12 6v6l4 2")
+    val ClipboardList get() = icon(
+        "clipboard-list", "M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z",
+        "M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2", "M12 11h4", "M12 16h4", "M8 11h.01", "M8 16h.01",
+    )
     val Archive get() = icon(
         "archive",
         "M3 3h18a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z",

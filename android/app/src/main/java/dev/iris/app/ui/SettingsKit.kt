@@ -32,6 +32,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -54,7 +56,14 @@ import dev.iris.app.data.formatTokens
 
 /** A full-screen page with a back button and a title. */
 @Composable
-fun Page(title: String, onBack: () -> Unit, subtitle: String? = null, action: (@Composable () -> Unit)? = null, content: LazyListScope.() -> Unit) {
+fun Page(
+    title: String,
+    onBack: () -> Unit,
+    subtitle: String? = null,
+    action: (@Composable () -> Unit)? = null,
+    state: LazyListState = rememberLazyListState(),
+    content: LazyListScope.() -> Unit,
+) {
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(Lucide.ChevronLeft, onBack, C.muted, 26.dp)
@@ -67,6 +76,7 @@ fun Page(title: String, onBack: () -> Unit, subtitle: String? = null, action: (@
         Box(Modifier.fillMaxWidth().height(1.dp).background(C.line))
         LazyColumn(
             Modifier.fillMaxSize(),
+            state = state,
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 48.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
             content = content,

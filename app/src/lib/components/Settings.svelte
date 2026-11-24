@@ -1,6 +1,8 @@
 <script lang="ts">
   import {
     Activity,
+    ChevronLeft,
+    ChevronRight,
     Mic,
     BookOpen,
     Briefcase,
@@ -49,6 +51,9 @@
 
   let { tab: initialTab }: { tab?: SettingsTab } = $props();
   let tab = $state<SettingsTab>(untrack(() => initialTab) ?? 'models');
+  // Narrow windows (phones) show the grouped list first and one page at a time, like the
+  // phone app; opened on a given page, they go straight to it. Wide windows show both.
+  let picking = $state(untrack(() => initialTab) == null);
 
   // The same groups, names and order as the phone's Settings.
   const groups: { title: string; tabs: { id: SettingsTab; label: string; icon: typeof Cpu }[] }[] = [
@@ -89,6 +94,7 @@
     },
     { title: 'About', tabs: [{ id: 'about', label: 'About & updates', icon: Info }] },
   ];
+  const tabLabel = $derived(groups.flatMap((g) => g.tabs).find((t) => t.id === tab)?.label ?? '');
 
   // ---- default model -----------------------------------------------------------
 
@@ -694,8 +700,18 @@
     }
   }
 
+  // A first click asks; the second (within a few seconds) revokes.
+  let confirmRevoke = $state<string | null>(null);
+  let confirmTimer: ReturnType<typeof setTimeout> | undefined;
   async function revoke(d: Device) {
     if (!app.api) return;
+    if (confirmRevoke !== d.id) {
+      confirmRevoke = d.id;
+      clearTimeout(confirmTimer);
+      confirmTimer = setTimeout(() => (confirmRevoke = null), 4000);
+      return;
+    }
+    confirmRevoke = null;
     try {
       await app.api.deleteDevice(d.id);
       await loadDevices();
@@ -800,28 +816,34 @@
 <Modal title="Settings" onclose={() => (app.modal = null)} width={820}>
   <!-- A fixed height, so the window doesn't jump when switching tabs -->
   <div class="flex h-full flex-col md:h-[min(620px,calc(100vh-9rem))] md:flex-row">
-    <nav class="flex shrink-0 gap-1 overflow-x-auto border-b border-line p-2 scroll-none md:block md:w-56 md:overflow-y-auto md:border-r md:border-b-0 md:p-3">
+    <nav class="min-h-0 flex-1 overflow-y-auto p-3 scroll-thin md:block md:w-56 md:flex-none md:border-r md:border-line {picking ? '' : 'max-md:hidden'}">
       {#each groups as g, gi (g.title)}
-        <!-- Group headings on wide windows; a thin divider between groups on narrow ones -->
-        <div class="hidden px-3 pb-1 text-[10.5px] font-semibold tracking-[0.08em] text-faint uppercase md:block {gi ? 'pt-4' : 'pt-0.5'}">{g.title}</div>
-        {#if gi}<div class="my-1.5 w-px shrink-0 bg-line md:hidden"></div>{/if}
+        <div class="px-3 pb-1 text-[10.5px] font-semibold tracking-[0.08em] text-faint uppercase {gi ? 'pt-4' : 'pt-0.5'}">{g.title}</div>
         {#each g.tabs as t (t.id)}
+          <!-- The current page is only marked on wide windows; on narrow ones this is a plain list -->
           <button
-            class="settings-tab group relative flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] whitespace-nowrap md:mb-0.5 md:w-full {tab === t.id
-              ? 'bg-elevated font-medium text-text'
+            class="settings-tab group relative mb-0.5 flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] whitespace-nowrap max-md:py-2.5 max-md:text-[14px] {tab === t.id
+              ? 'text-muted md:bg-elevated md:font-medium md:text-text'
               : 'text-muted hover:bg-hover hover:text-text'}"
             aria-current={tab === t.id ? 'page' : undefined}
-            onclick={() => (tab = t.id)}
+            onclick={() => {
+              tab = t.id;
+              picking = false;
+            }}
           >
-            {#if tab === t.id}<span class="settings-tab-bar"></span>{/if}
-            <t.icon size={15} class="transition-transform duration-200 group-hover:scale-110 {tab === t.id ? 'text-accent-hi' : ''}" />
-            {t.label}
+            {#if tab === t.id}<span class="settings-tab-bar max-md:hidden"></span>{/if}
+            <t.icon size={15} class="transition-transform duration-200 group-hover:scale-110 {tab === t.id ? 'md:text-accent-hi' : ''}" />
+            <span class="flex-1 text-left">{t.label}</span>
+            <ChevronRight size={15} class="text-faint md:hidden" />
           </button>
         {/each}
       {/each}
     </nav>
 
-    <div class="min-w-0 flex-1 overflow-y-auto p-4 scroll-thin md:p-6">
+    <div class="min-w-0 flex-1 overflow-y-auto p-4 scroll-thin md:p-6 {picking ? 'max-md:hidden' : ''}">
+      <button class="-mt-1 mb-3 flex items-center gap-1 text-[13px] text-muted hover:text-text md:hidden" onclick={() => (picking = true)}>
+        <ChevronLeft size={16} /> All settings <span class="text-faint">· {tabLabel}</span>
+      </button>
       {#key tab}<div class="settings-pane">
       {#if tab === 'models'}
           <!-- Default model: one choice for every agent -->
@@ -978,7 +1000,7 @@
               />
             </div>
           </div>
-          <p class="hint mt-3">Keys are stored only on this machine, outside the config file, and never sent to the app.</p>
+          <p class="hint mt-3">Keys are stored only on the server, outside the config file, and never sent to the app.</p>
           <div class="mt-5 flex justify-end gap-2">
             <button class="btn-ghost" onclick={() => (editing = null)}>Cancel</button>
             <button class="btn-primary" onclick={saveProvider} disabled={savingProvider}>
@@ -1294,7 +1316,7 @@
           <div>
             <h3 class="text-[15px] font-semibold">Saved logins</h3>
             <p class="text-[12.5px] text-faint">
-              Logins agents can use in their browser. Stored encrypted on this computer. Agents only see the name and
+              Logins agents can use in their browser. Stored encrypted on the server. Agents only see the name and
               site; the browser fills the login itself, and only on that site. Paying or ordering always asks you.
             </p>
           </div>
@@ -1506,7 +1528,7 @@
       {:else if tab === 'approvals'}
         <h3 class="text-[15px] font-semibold">Approvals</h3>
         <p class="mt-1 mb-5 text-[12.5px] text-faint">
-          When agents may run commands without asking you. Paying, installing apps, power and other risky steps always ask.
+          When agents may run commands without asking you. Shutting down, wiping disks, keys and passwords, user accounts and payments always ask, in every mode.
         </p>
         {@const modes = [
           { id: 'off', title: 'Ask me', text: 'Every command waits for you.', icon: ShieldOff },
@@ -1643,7 +1665,7 @@
             bind:value={tavilyKey}
             placeholder={search?.has_tavily_key ? 'Key saved. Leave blank to keep it.' : 'tvly-…'}
           />
-          <p class="hint">Get a free key at tavily.com. It's stored only on this machine.</p>
+          <p class="hint">Get a free key at tavily.com. It's stored only on the server.</p>
         </div>
         <div class="mt-5 flex max-w-xl items-center gap-2">
           {#if search}
@@ -1705,15 +1727,20 @@
               <Smartphone size={16} class="text-faint" />
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2 text-[13.5px] font-medium">
-                  {d.name}
-                  {#if d.local}<span class="rounded-full bg-accent-soft px-2 py-0.5 text-[11px] text-accent-hi">This app</span>{/if}
+                  {d.local ? 'I.R.I.S. on the server' : d.name}
+                  {#if d.local}<span class="rounded-full bg-accent-soft px-2 py-0.5 text-[11px] text-accent-hi">Always allowed</span>{/if}
                 </div>
                 <div class="text-[12px] text-faint">
                   Added {relativeTime(d.created_at)} · {d.last_seen_at ? `last seen ${relativeTime(d.last_seen_at)}` : 'never used'}
                 </div>
               </div>
               {#if !d.local}
-                <button class="btn-danger" onclick={() => revoke(d)}>Revoke</button>
+                {#if confirmRevoke === d.id}
+                  <button class="btn-ghost shrink-0" onclick={() => (confirmRevoke = null)}>Cancel</button>
+                {/if}
+                <button class="btn-danger shrink-0 whitespace-nowrap" onclick={() => revoke(d)}>
+                  {confirmRevoke === d.id ? 'Sign it out' : 'Revoke'}
+                </button>
               {/if}
             </div>
           {/each}
@@ -1766,7 +1793,7 @@
           </div>
         {/if}
         <p class="mb-5 text-[12.5px] text-faint">
-          Use I.R.I.S. from your phone or any browser, from anywhere. This computer connects out to your relay, so nothing is opened on your network, and everything is end-to-end encrypted: the relay only passes sealed messages along.
+          Use I.R.I.S. from your phone or any browser, from anywhere. The server connects out to your relay, so nothing is opened on your network, and everything is end-to-end encrypted: the relay only passes sealed messages along.
         </p>
 
         <div class="mb-6 rounded-xl border border-line p-4">
@@ -1785,7 +1812,7 @@
             {/if}
           </div>
           {#if link && !link.has_relay_key}
-            <p class="mt-2 text-[12px] text-amber-400">The relay's server key is missing on this computer (secrets\relay.key), so it can't connect yet.</p>
+            <p class="mt-2 text-[12px] text-amber-400">The relay's server key is missing on the server (secrets\relay.key), so it can't connect yet.</p>
           {/if}
         </div>
 

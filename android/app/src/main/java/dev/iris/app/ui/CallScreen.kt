@@ -581,7 +581,7 @@ fun CallButton(vm: IrisViewModel, agent: Agent) {
     // A soft violet disc, so the call button is easy to find; green with a beating dot on a call.
     val beat by rememberInfiniteTransition("call-dot").animateFloat(0.35f, 1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), "dot")
     Box(
-        Modifier.padding(horizontal = 2.dp).size(40.dp)
+        Modifier.size(38.dp)
             .background(if (onThisCall) C.success.copy(alpha = 0.16f) else C.accentSoft, CircleShape)
             .border(1.dp, if (onThisCall) C.success.copy(alpha = 0.5f) else C.accent.copy(alpha = 0.35f), CircleShape)
             .press {

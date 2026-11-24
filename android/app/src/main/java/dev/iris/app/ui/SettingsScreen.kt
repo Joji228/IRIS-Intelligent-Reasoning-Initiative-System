@@ -75,7 +75,7 @@ private val GROUPS = listOf(
 fun SettingsScreen(vm: IrisViewModel, page: String?) {
     val back = { vm.back(); Unit }
     when (page) {
-        null -> Page("Settings", back, subtitle = "On your server · changes apply right away") {
+        null -> Page("Settings", back, subtitle = "On your server · changes apply right away", state = vm.settingsScroll) {
             GROUPS.forEachIndexed { gi, (title, sections) ->
                 item(key = title) {
                     Column(Modifier.appearIn(gi), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -148,7 +148,7 @@ private fun ModelsPage(vm: IrisViewModel, back: () -> Unit) {
                     Label("Reasoning effort")
                     Chips(listOf("" to "Auto") + REASONING_LEVELS, reasoning) { level ->
                         reasoning = level
-                        scope.launch { vm.attempt { putReasoning(level) }?.let { reasoning = it.effort } }
+                        scope.launch { vm.attempt { putReasoning(level) }?.let { reasoning = it.effort; vm.reasoningDefault = it.effort } }
                     }
                     Hint("How hard all agents think, including Iris. Higher levels answer more carefully but are slower and use more tokens.")
                 }
@@ -207,7 +207,7 @@ private fun ApprovalsPage(vm: IrisViewModel, back: () -> Unit) {
     Page("Approvals", back, subtitle = "When agents run commands on their own") {
         item {
             Card {
-                CardTitle("New agents start with", "Orbs from \"+\" and agents Iris creates. Paying, installing apps, power and other risky steps always ask.")
+                CardTitle("New agents start with", "Orbs from \"+\" and agents Iris creates. Shutting down, wiping disks, keys and passwords, user accounts and payments always ask, in every mode.")
                 ChoiceCards(AUTO_MODES, auto ?: "") { mode ->
                     auto = mode
                     scope.launch { vm.attempt { putAutoDefault(mode) }?.let { auto = it.mode } }

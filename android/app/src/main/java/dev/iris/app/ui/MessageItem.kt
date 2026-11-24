@@ -96,8 +96,44 @@ fun MessageItem(vm: IrisViewModel, message: Message, agent: Agent?, isLast: Bool
         message.role == "user" && c.startsWith(Prefixes.UPDATE) -> Note(Lucide.CircleCheck, C.success) {
             "${c.removePrefix(Prefixes.UPDATE).substringBefore(" has finished").trim()} finished its task · ${agent?.name ?: "the agent"} is reporting back"
         }
+        message.role == "user" && c.startsWith(Prefixes.TASK) && c.contains(']') -> TaskMessage(vm, message, agent)
         message.role == "user" -> UserMessage(vm, message)
         message.role == "assistant" -> AssistantMessage(vm, message, agent, isLast)
+    }
+}
+
+/**
+ * A task another agent (usually Iris) handed this one: shown as a card from that agent, without
+ * the engine's header, outside-content note and closing instruction.
+ */
+@Composable
+private fun TaskMessage(vm: IrisViewModel, message: Message, agent: Agent?) {
+    val c = message.content
+    val end = c.indexOf(']')
+    val from = c.substring(Prefixes.TASK.length, end).substringBefore(" — ").trim()
+    var body = c.substring(end + 1)
+    val at = body.indexOf(Prefixes.OUTSIDE_NOTE)
+    val outside = at >= 0
+    if (outside) {
+        val close = body.indexOf(']', at)
+        body = body.substring(0, at) + (if (close >= 0) body.substring(close + 1) else "")
+    }
+    body = body.trim().removeSuffix("When you are done, reply with a clear summary of the result.").trim()
+    val sender = vm.agents.firstOrNull { it.name == from }
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(start = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (sender != null) Orb(sender, 26.dp) else Icon(Lucide.ClipboardList, C.accentHi, 16.dp)
+            Txt("Task from $from", 13.5.sp, C.text, FontWeight.SemiBold)
+            Txt(clock(message.createdAt), 11.sp, C.faint)
+        }
+        Column(
+            Modifier.padding(top = 8.dp).fillMaxWidth().background(C.surface, RoundedCornerShape(14.dp))
+                .border(1.dp, C.line, RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Markdown(body, size = 14.5f)
+            if (outside) Txt("Written after reading web pages or connected services, so ${agent?.name ?: "the agent"} treats it with care.", 12.sp, C.faint)
+        }
     }
 }
 
@@ -210,7 +246,8 @@ private fun AssistantMessage(vm: IrisViewModel, message: Message, agent: Agent?,
         val i = vm.messages.indexOfFirst { it.id == message.id }
         if (i < 0) null
         else vm.messages.drop(i + 1).firstOrNull {
-            it.role == "user" && !it.content.startsWith("[I.R.I.S.") && !it.content.startsWith(Prefixes.ROUTINE)
+            it.role == "user" && !it.content.startsWith("[I.R.I.S.") && !it.content.startsWith(Prefixes.ROUTINE) &&
+                !it.content.startsWith(Prefixes.TASK)
         }?.content
     }
     val context = LocalContext.current

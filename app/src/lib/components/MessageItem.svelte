@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { CalendarClock, Check, CircleAlert, CircleCheck, Copy, FileText, RotateCcw } from '@lucide/svelte';
+  import { CalendarClock, Check, CircleAlert, CircleCheck, ClipboardList, Copy, FileText, RotateCcw } from '@lucide/svelte';
   import { Phone, Rocket, Sparkles, Square, Telescope, Volume2 } from '@lucide/svelte';
   import { splitDetails } from '../details';
   import { app } from '../app.svelte';
@@ -27,6 +27,28 @@
 
   let { message, agent, isLast }: { message: Message; agent?: Agent; isLast: boolean } = $props();
 
+  // Matches the engine's team.rs delegation: "[Task from Iris — your team's coordinator]", the
+  // task, an optional outside-content note, then "When you are done, reply with …".
+  // Shown as a card from that agent instead of a bubble from the user.
+  const TASK_PREFIX = '[Task from ';
+  const OUTSIDE_NOTE = '[Note from I.R.I.S.: the agent that wrote this task had read';
+  const task = $derived.by(() => {
+    const c = message.content;
+    if (message.role !== 'user' || !c.startsWith(TASK_PREFIX) || c.indexOf(']') < 0) return null;
+    const end = c.indexOf(']');
+    const from = c.slice(TASK_PREFIX.length, end).split(' — ')[0].trim();
+    let body = c.slice(end + 1);
+    const at = body.indexOf(OUTSIDE_NOTE);
+    const outside = at >= 0;
+    if (outside) {
+      const close = body.indexOf(']', at);
+      body = body.slice(0, at) + (close >= 0 ? body.slice(close + 1) : '');
+    }
+    body = body.replace(/\s*When you are done, reply with a clear summary of the result\.\s*$/, '');
+    return { from, body: body.trim(), outside };
+  });
+  const taskAgent = $derived(task ? app.agents.find((a) => a.name === task.from) : undefined);
+
   // Matches the engine's routines::ROUTINE_PREFIX: "[Routine: name] task".
   const ROUTINE_PREFIX = '[Routine:';
   const routineName = $derived(
@@ -51,7 +73,7 @@
   const answer = $derived.by(() => {
     const i = app.messages.findIndex((m) => m.id === message.id);
     if (i < 0) return null;
-    const next = app.messages.slice(i + 1).find((m) => m.role === 'user' && !m.content.startsWith('[I.R.I.S.') && !m.content.startsWith('[Routine:'));
+    const next = app.messages.slice(i + 1).find((m) => m.role === 'user' && !m.content.startsWith('[I.R.I.S.') && !m.content.startsWith('[Routine:') && !m.content.startsWith(TASK_PREFIX));
     return next ? next.content : null;
   });
   const workRounds = $derived(rounds.slice(0, finalIdx));
@@ -79,6 +101,24 @@
     <span class="flex items-center gap-1.5 rounded-full bg-surface px-3 py-1 text-[11.5px] text-faint" title={message.content}>
       <CalendarClock size={12} class="text-accent-hi" /> Routine “{routineName}”
     </span>
+  </div>
+{:else if task}
+  <!-- Another agent (usually Iris) handed this agent a task -->
+  <div class="flex gap-3 animate-fade-in">
+    {#if taskAgent}<AgentAvatar agent={taskAgent} size={28} />{/if}
+    <div class="min-w-0 max-w-[min(42rem,100%)] flex-1">
+      <div class="mb-1 flex items-center gap-1.5 text-[12px] text-faint">
+        <ClipboardList size={12} class="text-accent-hi" />
+        <span>Task from <b class="font-medium text-muted">{task.from}</b></span>
+        <span class="text-[11px]">{clockTime(message.created_at)}</span>
+      </div>
+      <div class="rounded-2xl border border-line bg-surface px-4 py-2.5 text-[13.5px]">
+        <Markdown text={task.body} />
+        {#if task.outside}
+          <p class="mt-2 text-[11.5px] text-faint">Written after reading web pages or connected services, so {agent?.name ?? 'the agent'} treats it with care.</p>
+        {/if}
+      </div>
+    </div>
   </div>
 {:else if message.role === 'user' && message.content.startsWith(SETUP_PREFIX)}
   <!-- A summoned orb took on its job (and what Iris let it use) -->

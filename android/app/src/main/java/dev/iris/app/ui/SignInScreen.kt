@@ -137,7 +137,7 @@ fun SignInScreen(vm: IrisViewModel) {
             Spacer(Modifier.height(10.dp))
             Button("Paste a pairing link", ::paste, Modifier.fillMaxWidth(), primary = false, enabled = !busy, padding = PaddingValues14)
             Txt(
-                "On the server: Settings → Remote access → Pair a device.",
+                "On the server: Settings → Remote access → Show a pairing code.",
                 12.sp, C.faint, modifier = Modifier.padding(top = 8.dp),
             )
 

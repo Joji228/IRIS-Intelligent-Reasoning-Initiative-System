@@ -18,6 +18,10 @@
   } = $props();
 
   let text = $state('');
+  // A long placeholder ("Message Server Sentinel…") would wrap and be cut off in a narrow box:
+  // there it becomes just "Message…" (about 8px per character at this size).
+  let boxWidth = $state(0);
+  const shownPlaceholder = $derived(boxWidth && placeholder.length * 8 > boxWidth - 12 ? 'Message…' : placeholder);
   let input: HTMLTextAreaElement;
   // Deep research for the next message: the agent reads many sources and
   // writes a cited report. Matches the engine's chat::RESEARCH_PREFIX.
@@ -196,7 +200,8 @@
       {onkeydown}
       {onpaste}
       rows="1"
-      {placeholder}
+      placeholder={shownPlaceholder}
+      bind:clientWidth={boxWidth}
       disabled={disabled}
       class="block max-h-60 min-h-9 min-w-0 flex-1 resize-none bg-transparent px-1.5 py-[7px] text-[14.5px] leading-[22px] text-text placeholder:text-faint focus:outline-none scroll-thin"
     ></textarea>

@@ -121,7 +121,7 @@
 {#if agent}
   <section class="flex h-full flex-col">
     <!-- Header -->
-    <header class="flex h-14 shrink-0 items-center gap-3 border-b border-line pr-3 pl-1.5 md:px-6">
+    <header class="flex h-14 shrink-0 items-center gap-3 border-b border-line pr-2 pl-1.5 max-sm:gap-2 md:px-6">
       <button class="-mr-1.5 rounded-lg p-1.5 text-muted hover:bg-hover hover:text-text md:hidden" onclick={() => app.goHome()} aria-label="Back">
         <ChevronLeft size={22} />
       </button>
@@ -133,7 +133,7 @@
         mood={app.moods[agent.id]}
         activity={app.activityOf(agent.id)}
       />
-      <div class="min-w-[5.5rem] flex-1">
+      <div class="min-w-[5.5rem] flex-1 max-sm:min-w-0">
         <div class="truncate text-[14px] font-semibold">{agent.name}</div>
         <div class="truncate text-[11.5px] text-faint">
           {#if app.isWaiting(agent.id)}
@@ -146,7 +146,8 @@
         </div>
       </div>
       <!-- Model, thinking effort, auto mode and how full the chat is -->
-      <div class="flex min-w-0 shrink items-center gap-0.5 rounded-full border border-line bg-surface/60 p-0.5">
+      <!-- On phones it keeps its size (just effort and auto) and the name gives way -->
+      <div class="flex min-w-0 shrink items-center gap-0.5 rounded-full border border-line bg-surface/60 p-0.5 max-sm:shrink-0">
         <ModelPicker {agent} disabled={app.conn !== 'online'} below />
         <AutoPicker {agent} below />
         <div class="px-1 max-sm:hidden"><ContextRing used={contextUsed} agentName={agent.name} model={agent.provider && agent.model ? agent.model : undefined} below /></div>
