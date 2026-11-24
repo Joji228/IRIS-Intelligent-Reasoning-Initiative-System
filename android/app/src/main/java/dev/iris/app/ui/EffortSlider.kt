@@ -3,7 +3,8 @@ package dev.iris.app.ui
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,6 +19,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -35,6 +39,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlin.math.min
+import kotlin.math.sign
+import kotlin.math.sqrt
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -68,6 +78,11 @@ private val WARM = Color(0xFFF472B6)
 private val INSET = 14.dp
 /** Smooth deceleration with no overshoot (the desktop's cubic-bezier(0.22, 1, 0.36, 1)). */
 private val GLIDE = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
+/** The settle spring: critically damped (no overshoot), about a third of a second. */
+private const val SETTLE_STIFFNESS = 260f
+private val SETTLE = spring<Float>(dampingRatio = 1f, stiffness = SETTLE_STIFFNESS)
+/** Following the finger: stiff enough to keep up, smooth enough not to jolt. */
+private val FOLLOW = spring<Float>(dampingRatio = 1f, stiffness = 2200f)
 
 /**
  * How hard an agent thinks, as a slider over [REASONING_LEVELS] (Off … Max) with an "Auto" pill.
@@ -86,27 +101,39 @@ fun EffortSlider(
 ) {
     val ids = REASONING_LEVELS.map { it.first }
     val last = ids.size - 1
-    // What was just picked, shown at once while the change travels to the server.
-    var local by remember(value) { mutableStateOf<String?>(null) }
+    // What was just picked, shown at once while the change travels to the server; it gives
+    // way when the server's answer arrives (or after a while, if it never does). The gesture
+    // code below lives as long as the slider, so it reads the latest value and callback.
+    var local by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(value) { if (local == value) local = null }
+    LaunchedEffect(local) {
+        if (local != null) {
+            delay(10_000)
+            local = null
+        }
+    }
+    val latestValue by rememberUpdatedState(value)
+    val latestOnChange by rememberUpdatedState(onChange)
     val current = local ?: value
     val auto = current.isEmpty()
     val restIndex = ids.indexOf(if (auto) autoLevel.ifEmpty { "medium" } else current).let { if (it < 0) 2 else it }
 
     var dragging by remember { mutableStateOf(false) }
-    var dragPos by remember { mutableFloatStateOf(0f) }
     var widthPx by remember { mutableFloatStateOf(0f) }
     val haptic = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
 
-    val pos by animateFloatAsState(
-        if (dragging) dragPos else restIndex.toFloat(),
-        if (dragging) snap() else tween(280, easing = GLIDE),
-        label = "effort-thumb",
-    )
+    // The thumb's position in levels (fractional). While dragging it follows the finger
+    // closely; on release a critically damped spring carries it on with the finger's speed
+    // and settles on a level without overshooting (as on the desktop).
+    val anim = remember { Animatable(restIndex.toFloat()) }
+    LaunchedEffect(restIndex) { if (!dragging) anim.animateTo(restIndex.toFloat(), SETTLE) }
+    val pos = anim.value
     val dim by animateFloatAsState(if (auto && !dragging) 0.4f else 1f, tween(220), label = "effort-dim")
     val thumbScale by animateFloatAsState(if (dragging) 1.12f else 1f, tween(180, easing = GLIDE), label = "effort-scale")
     val heat = (pos / last).coerceIn(0f, 1f)
 
-    val activeIndex = if (dragging) dragPos.roundToInt().coerceIn(0, last) else restIndex
+    val activeIndex = if (dragging) pos.roundToInt().coerceIn(0, last) else restIndex
     val showsAuto = auto && !dragging
     val name = if (showsAuto) autoLabel else REASONING_LEVELS[activeIndex].second
     val hint = if (showsAuto) autoHint else EFFORT_HINTS[ids[activeIndex]].orEmpty()
@@ -114,7 +141,7 @@ fun EffortSlider(
     fun pick(i: Int) {
         val id = ids[i]
         local = id
-        if (id != value) onChange(id)
+        if (id != latestValue) latestOnChange(id)
     }
 
     Column(modifier.fillMaxWidth()) {
@@ -129,7 +156,7 @@ fun EffortSlider(
                     .border(1.dp, if (auto) C.accent.copy(alpha = 0.5f) else C.lineStrong, pill)
                     .press {
                         local = ""
-                        if (value.isNotEmpty()) onChange("")
+                        if (latestValue.isNotEmpty()) latestOnChange("")
                     }
                     .padding(horizontal = 11.dp, vertical = 4.dp),
             ) {
@@ -161,21 +188,25 @@ fun EffortSlider(
                         var moved = false
                         var cancelled = false
                         var stop = at(x).roundToInt()
+                        val tracker = VelocityTracker()
+                        tracker.addPosition(down.uptimeMillis, down.position)
                         while (true) {
                             val event = awaitPointerEvent()
                             val change = event.changes.firstOrNull { it.id == down.id } ?: break
                             if (!change.pressed) break
                             // Someone else (the sheet's scroll) took the gesture before it became a drag.
                             if (!moved && change.isConsumed) { cancelled = true; break }
+                            tracker.addPosition(change.uptimeMillis, change.position)
                             if (!moved && abs(change.position.x - down.position.x) > viewConfiguration.touchSlop) {
                                 moved = true
                                 dragging = true
-                                dragPos = at(x)
                             }
                             if (moved) {
                                 x = change.position.x
-                                dragPos = at(x)
-                                val s = dragPos.roundToInt()
+                                val to = at(x)
+                                // A very stiff spring: it keeps up with the finger but never jolts.
+                                scope.launch { anim.animateTo(to, FOLLOW) }
+                                val s = to.roundToInt()
                                 if (s != stop) {
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     stop = s
@@ -183,10 +214,25 @@ fun EffortSlider(
                                 change.consume()
                             }
                         }
-                        val i = at(x).roundToInt().coerceIn(0, last)
-                        if (moved) dragPos = i.toFloat()
                         dragging = false
-                        if (!cancelled) pick(i)
+                        if (cancelled) return@awaitEachGesture
+                        if (moved) {
+                            // The release speed, in levels per second.
+                            val usable = (widthPx - 2 * inset).coerceAtLeast(1f)
+                            val vel = (tracker.calculateVelocity().x / usable * last).coerceIn(-14f, 14f)
+                            val here = at(x)
+                            val i = (here + vel * 0.12f).roundToInt().coerceIn(0, last)
+                            // Only speed towards the level is kept, never enough to overshoot.
+                            val d = i - here
+                            val toward = if (vel * d > 0) sign(vel) * min(abs(vel), 0.9f * sqrt(SETTLE_STIFFNESS) * abs(d)) else 0f
+                            scope.launch { anim.animateTo(i.toFloat(), SETTLE, initialVelocity = toward) }
+                            pick(i)
+                        } else {
+                            // A tap: glide to the level nearest the tap.
+                            val i = at(x).roundToInt().coerceIn(0, last)
+                            scope.launch { anim.animateTo(i.toFloat(), SETTLE) }
+                            pick(i)
+                        }
                     }
                 }
                 .drawBehind {
