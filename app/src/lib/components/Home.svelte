@@ -1,6 +1,5 @@
 <script lang="ts">
   import { ArrowRight, Check, Plus, ShieldAlert, TriangleAlert, X } from '@lucide/svelte';
-  import { tick } from 'svelte';
   import { flip } from 'svelte/animate';
   import { app } from '../app.svelte';
   import { greeting, relativeTime } from '../time';
@@ -19,23 +18,31 @@
   let dragX = $state(0);
   let dragY = $state(0);
   let justDragged = false;
+  // The grid's slots (Iris's excluded), measured once when a drag starts. The
+  // cards slide between them with an animation, so measuring the cards
+  // themselves mid-drag gives in-between positions and made them swap back and
+  // forth; the slots don't move.
+  let slots: DOMRect[] = [];
 
-  const centerOf = (id: string): [number, number] => {
-    const r = cards[id]?.getBoundingClientRect();
-    return r ? [r.left + r.width / 2, r.top + r.height / 2] : [0, 0];
-  };
+  const others = () => app.orderedAgents.filter((a) => a.role !== 'main').map((a) => a.id);
+  const middle = (r: DOMRect): [number, number] => [r.left + r.width / 2, r.top + r.height / 2];
 
   function ondown(e: PointerEvent, id: string, main: boolean) {
     if (e.button !== 0 || main || e.pointerType === 'touch') return;
-    const [cx, cy] = centerOf(id);
+    const r = cards[id]?.getBoundingClientRect();
+    if (!r) return;
+    const [cx, cy] = middle(r);
     pressed = { id, x: e.clientX, y: e.clientY, gx: e.clientX - cx, gy: e.clientY - cy };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
 
-  function follow(e: PointerEvent, id: string) {
-    const [cx, cy] = centerOf(id);
-    dragX = e.clientX - pressed!.gx - cx + dragX;
-    dragY = e.clientY - pressed!.gy - cy + dragY;
+  // The dragged card sits under the pointer: its offset from its current slot.
+  function follow(e: PointerEvent, index: number) {
+    const slot = slots[index];
+    if (!slot) return;
+    const [cx, cy] = middle(slot);
+    dragX = e.clientX - pressed!.gx - cx;
+    dragY = e.clientY - pressed!.gy - cy;
   }
 
   function onmove(e: PointerEvent) {
@@ -43,39 +50,29 @@
     if (!dragging) {
       if (Math.hypot(e.clientX - pressed.x, e.clientY - pressed.y) < 6) return;
       dragging = pressed.id;
+      slots = others().map((id) => cards[id]?.getBoundingClientRect()).filter((r): r is DOMRect => !!r);
     }
     const id = dragging;
-    const ids = app.orderedAgents.filter((a) => a.role !== 'main').map((a) => a.id);
-    // The card (or the dragged card's own slot) nearest the pointer decides where it goes.
-    let best = id;
-    let bestDist = Infinity;
-    for (const other of ids) {
-      const [cx, cy] = other === id ? slotCenter(id) : centerOf(other);
-      const d = Math.hypot(e.clientX - cx, e.clientY - cy);
-      if (d < bestDist) {
-        bestDist = d;
-        best = other;
-      }
-    }
-    if (best !== id) {
-      const to = ids.indexOf(best);
+    const ids = others();
+    const from = ids.indexOf(id);
+    // Move only once the pointer is inside another slot (a little inset, so the
+    // edges between slots don't flip it back and forth).
+    const to = slots.findIndex(
+      (r, i) =>
+        i !== from &&
+        e.clientX > r.left + 12 &&
+        e.clientX < r.right - 12 &&
+        e.clientY > r.top + 12 &&
+        e.clientY < r.bottom - 12,
+    );
+    if (to >= 0 && from >= 0) {
       const next = ids.filter((x) => x !== id);
       next.splice(to, 0, id);
-      if (next.join() !== ids.join()) {
-        app.setOrbOrder(next);
-        // Measure after the reorder: the slot has moved under the card.
-        void tick().then(() => {
-          if (dragging === id && pressed) follow(e, id);
-        });
-      }
+      app.setOrbOrder(next);
+      follow(e, to);
+    } else {
+      follow(e, from);
     }
-    follow(e, id);
-  }
-
-  // Where the dragged card's slot is (its box minus how far it has been dragged).
-  function slotCenter(id: string): [number, number] {
-    const [cx, cy] = centerOf(id);
-    return [cx - dragX, cy - dragY];
   }
 
   function onup() {
@@ -84,6 +81,7 @@
     dragging = null;
     dragX = 0;
     dragY = 0;
+    slots = [];
   }
 </script>
 
