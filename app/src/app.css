@@ -227,6 +227,69 @@ select:focus-visible {
   pointer-events: none;
 }
 
+/* ---- hover bubbles (lib/tooltip.ts: one shared bubble) ---------------------
+   Hidden: transparent, a touch smaller and nudged towards its button; shown:
+   it settles in place. Between buttons it glides instead of blinking. */
+.iris-tip {
+  position: fixed;
+  z-index: 100;
+  left: 0;
+  top: 0;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--c-line-strong);
+  background: var(--c-elevated);
+  color: var(--c-text);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: nowrap;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.28);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(var(--tip-dx, 0), var(--tip-dy, 0)) scale(0.97);
+  transform-origin: var(--arrow-x, 50%) var(--arrow-y, 50%);
+  transition:
+    opacity 140ms ease-out,
+    transform 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear 140ms;
+}
+.iris-tip[data-side='bottom'] { --tip-dy: -3px; }
+.iris-tip[data-side='top'] { --tip-dy: 3px; }
+.iris-tip[data-side='right'] { --tip-dx: -3px; }
+.iris-tip[data-side='left'] { --tip-dx: 3px; }
+.iris-tip.show {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition:
+    opacity 140ms ease-out,
+    transform 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s;
+}
+.iris-tip.show.glide {
+  transition:
+    left 150ms cubic-bezier(0.22, 1, 0.36, 1),
+    top 150ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 140ms ease-out,
+    transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* The arrow: a small rotated square on the side facing the button. */
+.iris-tip::before {
+  content: '';
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  background: inherit;
+  border: inherit;
+  border-width: 1px 0 0 1px;
+  border-radius: 1px;
+}
+.iris-tip[data-side='bottom']::before { top: -4.5px; left: calc(var(--arrow-x) - 3.5px); transform: rotate(45deg); }
+.iris-tip[data-side='top']::before { bottom: -4.5px; left: calc(var(--arrow-x) - 3.5px); transform: rotate(225deg); }
+.iris-tip[data-side='right']::before { left: -4.5px; top: calc(var(--arrow-y) - 3.5px); transform: rotate(-45deg); }
+.iris-tip[data-side='left']::before { right: -4.5px; top: calc(var(--arrow-y) - 3.5px); transform: rotate(135deg); }
 /* Same specificity as .iris-tip would lose to its nowrap, so qualify it. */
 .iris-tip.iris-tip-wrap {
   width: max-content;
@@ -234,20 +297,15 @@ select:focus-visible {
   white-space: normal;
   line-height: 1.45;
 }
-
-.iris-tip {
-  position: fixed;
-  z-index: 100;
-  padding: 5px 9px;
-  border-radius: 8px;
-  background: var(--c-elevated);
-  color: var(--c-text);
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
-  box-shadow: var(--shadow-pop);
-  pointer-events: none;
-  animation: var(--animate-fade-in);
+:root[data-motion='off'] .iris-tip,
+:root[data-motion='off'] .iris-tip.show {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-motion='system'] .iris-tip,
+  :root[data-motion='system'] .iris-tip.show {
+    transition: none;
+  }
 }
 
 /* Pulsing amber ring: the agent is paused, waiting for the user's approval. */

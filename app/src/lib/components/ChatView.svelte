@@ -163,8 +163,8 @@
           : 'border-accent/35 bg-accent-soft text-accent-hi hover:bg-accent/25'}"
         onclick={() => app.startCall(agent)}
         disabled={app.conn !== 'online'}
-        use:tip={call.agent?.id === agent.id ? 'Back to the call' : `Call `}
-        aria-label={`Call `}
+        use:tip={call.agent?.id === agent.id ? 'Back to the call' : `Call ${agent.name}`}
+        aria-label={`Call ${agent.name}`}
       >
         <Phone size={16} />
         {#if call.agent?.id === agent.id}<span class="absolute top-1 right-1 size-2 animate-pulse rounded-full bg-success"></span>{/if}
