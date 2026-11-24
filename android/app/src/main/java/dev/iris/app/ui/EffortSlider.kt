@@ -1,8 +1,9 @@
 package dev.iris.app.ui
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -31,7 +32,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -65,7 +65,9 @@ private val EFFORT_HINTS = mapOf(
 private val WARM = Color(0xFFF472B6)
 
 /** Room at both ends of the track so the thumb stays inside it (half the thumb). */
-private val INSET = 11.dp
+private val INSET = 14.dp
+/** Smooth deceleration with no overshoot (the desktop's cubic-bezier(0.22, 1, 0.36, 1)). */
+private val GLIDE = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
 
 /**
  * How hard an agent thinks, as a slider over [REASONING_LEVELS] (Off … Max) with an "Auto" pill.
@@ -97,11 +99,11 @@ fun EffortSlider(
 
     val pos by animateFloatAsState(
         if (dragging) dragPos else restIndex.toFloat(),
-        if (dragging) snap() else spring(dampingRatio = 0.6f, stiffness = 400f),
+        if (dragging) snap() else tween(280, easing = GLIDE),
         label = "effort-thumb",
     )
-    val dim by animateFloatAsState(if (auto && !dragging) 0.35f else 1f, tween(250), label = "effort-dim")
-    val thumbScale by animateFloatAsState(if (dragging) 1.15f else 1f, spring(dampingRatio = 0.5f, stiffness = 500f), label = "effort-scale")
+    val dim by animateFloatAsState(if (auto && !dragging) 0.4f else 1f, tween(220), label = "effort-dim")
+    val thumbScale by animateFloatAsState(if (dragging) 1.12f else 1f, tween(180, easing = GLIDE), label = "effort-scale")
     val heat = (pos / last).coerceIn(0f, 1f)
 
     val activeIndex = if (dragging) dragPos.roundToInt().coerceIn(0, last) else restIndex
@@ -192,30 +194,39 @@ fun EffortSlider(
                     val cy = size.height / 2
                     val usable = size.width - 2 * inset
                     val tx = inset + usable * pos / last
-                    val h = 6.dp.toPx()
+                    // A 10dp bar; the fill reaches under the thumb's middle, with a soft highlight on top.
+                    val h = 10.dp.toPx()
                     val r = CornerRadius(h / 2)
-                    val hot = lerp(C.accent, WARM, heat)
-                    drawRoundRect(C.lineStrong, Offset(inset, cy - h / 2), Size(usable, h), r)
-                    if (tx > inset) {
-                        drawRoundRect(
-                            Brush.horizontalGradient(listOf(C.accent, hot), startX = inset, endX = tx),
-                            Offset(inset, cy - h / 2), Size(tx - inset, h), r, alpha = dim,
-                        )
-                    }
+                    val hot = lerp(C.accent, WARM, heat * 0.85f)
+                    // The bar reaches half its height past the end stops, so their dots sit inside it.
+                    val start = inset - h / 2
+                    drawRoundRect(C.lineStrong, Offset(start, cy - h / 2), Size(usable + h, h), r)
+                    val fillEnd = maxOf(tx, start + h)
+                    drawRoundRect(
+                        Brush.horizontalGradient(listOf(C.accent, hot), startX = start, endX = fillEnd),
+                        Offset(start, cy - h / 2), Size(fillEnd - start, h), r, alpha = dim,
+                    )
+                    drawRoundRect(
+                        Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.18f), Color.Transparent), startY = cy - h / 2, endY = cy),
+                        Offset(start, cy - h / 2), Size(fillEnd - start, h), r, alpha = dim,
+                    )
                     for (i in 0..last) {
                         val dx = inset + usable * i / last
                         val on = i <= pos + 0.01f
                         drawCircle(
-                            if (on) Color.White.copy(alpha = 0.85f * dim) else C.faint.copy(alpha = 0.6f),
-                            radius = 3.dp.toPx(), center = Offset(dx, cy),
+                            if (on) Color.White.copy(alpha = 0.7f * dim) else C.faint.copy(alpha = 0.6f),
+                            radius = 2.dp.toPx(), center = Offset(dx, cy),
                         )
                     }
-                    drawCircle(
-                        hot.copy(alpha = (0.15f + 0.3f * heat) * dim),
-                        radius = (14.dp.toPx() + 8.dp.toPx() * heat) * thumbScale, center = Offset(tx, cy),
-                    )
-                    drawCircle(hot.copy(alpha = dim), radius = 11.dp.toPx() * thumbScale, center = Offset(tx, cy))
-                    drawCircle(Color(0xFFF7F5FF).copy(alpha = 0.35f + 0.65f * dim), radius = 9.dp.toPx() * thumbScale, center = Offset(tx, cy))
+                    // The thumb: a soft glow that grows with the level, a shadow, a white disc
+                    // with a thin tinted ring, and a tinted core.
+                    val t = thumbScale
+                    val center = Offset(tx, cy)
+                    drawCircle(hot.copy(alpha = (0.12f + 0.25f * heat) * dim), radius = (15.dp.toPx() + 6.dp.toPx() * heat) * t, center = center)
+                    drawCircle(Color.Black.copy(alpha = 0.28f * dim), radius = 12.5.dp.toPx() * t, center = center + Offset(0f, 1.dp.toPx()))
+                    drawCircle(hot.copy(alpha = 0.5f * dim), radius = 12.5.dp.toPx() * t, center = center)
+                    drawCircle(Color.White.copy(alpha = 0.55f + 0.45f * dim), radius = 12.dp.toPx() * t, center = center)
+                    drawCircle(hot.copy(alpha = dim), radius = 4.dp.toPx() * (if (dragging) 1.25f else 1f) * t, center = center)
                 },
         )
 
@@ -224,14 +235,14 @@ fun EffortSlider(
             content = {
                 REASONING_LEVELS.forEachIndexed { i, (_, label) ->
                     val on = !showsAuto && i == activeIndex
-                    val scale by animateFloatAsState(if (on) 1.08f else 1f, spring(dampingRatio = 0.55f, stiffness = 500f), label = "effort-label")
+                    // Just a colour change, no bounce.
+                    val color by animateColorAsState(if (on) C.accentHi else C.faint, tween(200), label = "effort-label")
                     Box(
-                        Modifier.graphicsLayer { scaleX = scale; scaleY = scale }
-                            .clip(RoundedCornerShape(6.dp))
+                        Modifier.clip(RoundedCornerShape(6.dp))
                             .press { pick(i) }
                             .padding(horizontal = 4.dp, vertical = 2.dp),
                     ) {
-                        Txt(label, 12.sp, if (on) C.accentHi else C.faint, if (on) FontWeight.Medium else FontWeight.Normal)
+                        Txt(label, 12.sp, color, if (on) FontWeight.SemiBold else FontWeight.Normal)
                     }
                 }
             },

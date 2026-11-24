@@ -1,7 +1,7 @@
 <script lang="ts">
   // How hard an agent thinks: a slider over Off → Max with an "Auto" pill.
-  // The thumb springs between stops, the fill warms up as the level rises, and
-  // dragging only commits once, on release (one settings change per gesture).
+  // The thumb glides to a stop (no bounce), the fill warms up as the level
+  // rises, and dragging only commits once, on release (one change per gesture).
   import { Brain } from '@lucide/svelte';
   import { REASONING_LEVELS } from '../types';
 
@@ -113,14 +113,14 @@
     onkeydown={key}
   >
     <div class="effort-rail"></div>
-    <div class="effort-fill" style="width: {pct}%"></div>
+    <div class="effort-fill" style="width: calc({pct}% + 5px)"></div>
     {#each stops as s, i (s.id)}
       <span class="effort-dot {i <= pos + 0.01 ? 'on' : ''}" style="left: {(i / last) * 100}%"></span>
     {/each}
-    <div class="effort-thumb" style="left: {pct}%"></div>
+    <div class="effort-thumb" style="left: {pct}%"><span class="effort-thumb-core"></span></div>
   </div>
 
-  <div class="relative mt-1.5 h-5">
+  <div class="relative mt-2 h-5">
     {#each stops as s, i (s.id)}
       <button
         class="effort-stop {!auto && i === chosen ? 'on' : ''}"
@@ -135,115 +135,138 @@
 
 <style>
   .effort {
-    --spring: cubic-bezier(0.34, 1.45, 0.64, 1);
+    /* Smooth deceleration, no overshoot. */
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
     --warm: #f472b6;
+    --tint: color-mix(in srgb, var(--warm) calc(var(--heat) * 75%), var(--color-accent));
   }
   .effort-body {
-    padding: 0 10px;
+    padding: 0 12px;
   }
   .effort-label {
-    animation: label-in 260ms var(--spring);
+    animation: label-in 180ms ease-out;
   }
   @keyframes label-in {
     from {
-      opacity: 0;
-      transform: translateY(4px);
+      opacity: 0.35;
     }
   }
   .effort-auto {
-    transition: background-color 180ms, color 180ms, border-color 180ms, transform 120ms;
-  }
-  .effort-auto:active {
-    transform: scale(0.94);
+    transition:
+      background-color 160ms ease-out,
+      color 160ms ease-out,
+      border-color 160ms ease-out;
   }
   .effort-track {
     position: relative;
-    height: 28px;
+    height: 34px;
     cursor: pointer;
     touch-action: none;
     outline: none;
     border-radius: 999px;
   }
-  .effort-track:focus-visible .effort-thumb {
-    box-shadow:
-      0 0 0 4px color-mix(in srgb, var(--color-accent) 35%, transparent),
-      0 0 calc(6px + var(--heat) * 14px) color-mix(in srgb, var(--color-accent) calc(25% + var(--heat) * 35%), transparent);
-  }
+  /* The bar reaches 5px past the end stops, so their dots sit inside it. */
   .effort-rail,
   .effort-fill {
     position: absolute;
     top: 50%;
-    left: 0;
-    height: 6px;
-    margin-top: -3px;
+    left: -5px;
+    height: 10px;
+    margin-top: -5px;
     border-radius: 999px;
   }
   .effort-rail {
-    right: 0;
+    right: -5px;
     background: var(--color-line-strong);
+    box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.25);
   }
+  /* The fill reaches under the thumb's middle; a soft highlight on top gives it depth. */
   .effort-fill {
-    background: linear-gradient(
-      90deg,
-      var(--color-accent),
-      color-mix(in srgb, var(--warm) calc(var(--heat) * 85%), var(--color-accent))
-    );
+    min-width: 10px;
+    background:
+      linear-gradient(180deg, rgb(255 255 255 / 0.18), rgb(255 255 255 / 0) 60%),
+      linear-gradient(90deg, var(--color-accent), var(--tint));
+    box-shadow: 0 0 calc(4px + var(--heat) * 10px) color-mix(in srgb, var(--tint) calc(15% + var(--heat) * 25%), transparent);
     transition:
-      width 420ms var(--spring),
-      opacity 200ms;
+      width 260ms var(--ease),
+      opacity 200ms ease-out,
+      box-shadow 260ms ease-out;
   }
   .effort-dot {
     position: absolute;
     top: 50%;
-    width: 6px;
-    height: 6px;
-    margin: -3px 0 0 -3px;
+    width: 4px;
+    height: 4px;
+    margin: -2px 0 0 -2px;
     border-radius: 999px;
     background: var(--color-faint);
-    opacity: 0.55;
+    opacity: 0.6;
     transition:
-      background-color 200ms,
-      opacity 200ms,
-      transform 200ms;
+      background-color 200ms ease-out,
+      opacity 200ms ease-out;
   }
   .effort-dot.on {
-    background: var(--color-on-accent);
-    opacity: 0.9;
-    transform: scale(0.8);
+    background: #fff;
+    opacity: 0.7;
   }
   .effort-thumb {
     position: absolute;
     top: 50%;
-    width: 20px;
-    height: 20px;
-    margin: -10px 0 0 -10px;
+    width: 24px;
+    height: 24px;
+    margin: -12px 0 0 -12px;
     border-radius: 999px;
     background: #fff;
-    border: 2px solid color-mix(in srgb, var(--warm) calc(var(--heat) * 70%), var(--color-accent));
-    box-shadow: 0 0 calc(6px + var(--heat) * 14px) color-mix(in srgb, var(--color-accent) calc(25% + var(--heat) * 35%), transparent);
+    display: grid;
+    place-items: center;
+    box-shadow:
+      0 1px 3px rgb(0 0 0 / 0.3),
+      0 0 0 1px color-mix(in srgb, var(--tint) 45%, transparent),
+      0 0 calc(6px + var(--heat) * 12px) color-mix(in srgb, var(--tint) calc(20% + var(--heat) * 30%), transparent);
     transition:
-      left 420ms var(--spring),
-      transform 180ms var(--spring),
-      opacity 200ms,
-      box-shadow 300ms,
-      border-color 300ms;
+      left 260ms var(--ease),
+      transform 180ms var(--ease),
+      opacity 200ms ease-out,
+      box-shadow 260ms ease-out;
+  }
+  .effort-thumb-core {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--tint);
+    transition:
+      background-color 260ms ease-out,
+      transform 180ms var(--ease);
   }
   .effort-track:hover .effort-thumb {
-    transform: scale(1.08);
+    transform: scale(1.06);
+  }
+  .effort-track:focus-visible .effort-thumb {
+    box-shadow:
+      0 1px 3px rgb(0 0 0 / 0.3),
+      0 0 0 4px color-mix(in srgb, var(--color-accent) 35%, transparent);
+  }
+  /* While dragging the thumb follows the pointer exactly and lifts a little. */
+  .effort-track.is-dragging {
+    cursor: grabbing;
   }
   .effort-track.is-dragging .effort-thumb {
-    transform: scale(1.18);
+    transform: scale(1.12);
     transition:
-      transform 180ms var(--spring),
-      box-shadow 300ms,
-      border-color 300ms;
+      transform 180ms var(--ease),
+      box-shadow 260ms ease-out;
+  }
+  .effort-track.is-dragging .effort-thumb-core {
+    transform: scale(1.25);
   }
   .effort-track.is-dragging .effort-fill {
-    transition: opacity 200ms;
+    transition: box-shadow 260ms ease-out;
   }
-  .effort-track.is-auto .effort-fill,
+  .effort-track.is-auto .effort-fill {
+    opacity: 0.3;
+  }
   .effort-track.is-auto .effort-thumb {
-    opacity: 0.35;
+    opacity: 0.55;
   }
   .effort-stop {
     position: absolute;
@@ -252,25 +275,20 @@
     font-size: 11.5px;
     color: var(--color-faint);
     white-space: nowrap;
-    transition:
-      color 200ms,
-      transform 260ms var(--spring);
+    transition: color 200ms ease-out;
   }
   .effort-stop:first-child {
-    transform: translateX(-10px);
+    transform: translateX(-12px);
   }
   .effort-stop:last-child {
-    transform: translateX(calc(-100% + 10px));
+    transform: translateX(calc(-100% + 12px));
   }
   .effort-stop:hover {
     color: var(--color-text);
   }
   .effort-stop.on {
     color: var(--color-accent-hi);
-    font-weight: 500;
-  }
-  .effort-stop.on:not(:first-child):not(:last-child) {
-    transform: translateX(-50%) scale(1.08);
+    font-weight: 600;
   }
   :global(:root[data-motion='off']) .effort *,
   :global(:root[data-motion='off']) .effort {
