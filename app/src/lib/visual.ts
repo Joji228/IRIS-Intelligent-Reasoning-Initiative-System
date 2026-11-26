@@ -3,7 +3,7 @@
 // never in the app's own document.
 
 import { app } from './app.svelte';
-import { inDesktopApp } from './connection';
+import { inDesktopApp, inWebLink } from './connection';
 
 export type Segment =
   | { kind: 'md'; text: string }
@@ -51,7 +51,8 @@ export function splitVisuals(text: string): Segment[] {
  *  otherwise (the relay sends it with its own CSP). */
 export function frameUrl(): string {
   if (inDesktopApp && app.api) return `${app.api.base}/visual`;
-  return '/visual.html';
+  // The relay (Cloudflare) serves public/visual.html at /visual; the dev server doesn't.
+  return inWebLink ? '/visual' : '/visual.html';
 }
 
 const THEME_VARS = [

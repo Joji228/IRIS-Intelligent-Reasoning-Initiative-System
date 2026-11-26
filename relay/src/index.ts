@@ -53,8 +53,10 @@ export default {
     // Everything else: the web app (static files), with security headers.
     const res = await env.ASSETS.fetch(req);
     const headers = new Headers(res.headers);
-    const policy = url.pathname === '/visual.html' ? visualFrameHeaders() : securityHeaders(url.host, url.protocol === 'https:');
-    if (url.pathname === '/visual.html') headers.delete('X-Frame-Options');
+    // The visual-card frame (Cloudflare serves /visual.html at /visual) has its own policy.
+    const frame = url.pathname === '/visual' || url.pathname === '/visual.html';
+    const policy = frame ? visualFrameHeaders() : securityHeaders(url.host, url.protocol === 'https:');
+    if (frame) headers.delete('X-Frame-Options');
     for (const [name, value] of Object.entries(policy)) headers.set(name, value);
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
   },
