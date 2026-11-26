@@ -64,6 +64,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -112,7 +113,10 @@ fun ChatScreen(vm: IrisViewModel, agent: Agent) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(C.line))
 
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            Messages(vm, agent) { draft = it }
+            // Visual cards in replies can answer for the user (a tapped choice, a filled form).
+            CompositionLocalProvider(LocalVisualSend provides { text: String -> vm.send(agent, text) }) {
+                Messages(vm, agent) { draft = it }
+            }
         }
 
         // Queue: messages waiting for a busy agent.

@@ -12,6 +12,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.animation.core.Animatable
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -56,15 +60,29 @@ import dev.iris.app.link.LinkState
 /** Clickable with a soft press dim instead of Material's ripple. */
 fun Modifier.press(enabled: Boolean = true, role: Role = Role.Button, onClick: () -> Unit): Modifier = composed {
     val source = remember { MutableInteractionSource() }
-    val pressed by source.collectIsPressedAsState()
-    // A plain dim while held, eased back on release: no shrinking, no bounce.
-    val k by animateFloatAsState(
-        if (pressed) 1f else 0f,
-        if (pressed) tween(70) else tween(180, easing = Motion.ease),
-        label = "press",
-    )
-    graphicsLayer { alpha = 1f - 0.3f * k }
-        .clickable(interactionSource = source, indication = null, enabled = enabled, role = role, onClick = onClick)
+    pressDim(source).clickable(interactionSource = source, indication = null, enabled = enabled, role = role, onClick = onClick)
+}
+
+/**
+ * The press feedback every tappable shares: a plain dim while held, eased back on
+ * release (no shrinking, no bounce). A quick tap always flashes it in full: inside a
+ * scrolling list Compose reports the press only when the finger lifts, so a dim that
+ * followed "is pressed" alone never showed for a tap there.
+ */
+fun Modifier.pressDim(source: MutableInteractionSource): Modifier = composed {
+    val k = remember { Animatable(0f) }
+    LaunchedEffect(source) {
+        source.interactions.collectLatest { i ->
+            when (i) {
+                is PressInteraction.Press -> k.animateTo(1f, tween(70))
+                is PressInteraction.Release, is PressInteraction.Cancel -> {
+                    if (k.value < 1f) k.animateTo(1f, tween(60))
+                    k.animateTo(0f, tween(220, easing = Motion.ease))
+                }
+            }
+        }
+    }
+    graphicsLayer { alpha = 1f - 0.3f * k.value }
 }
 
 @Composable

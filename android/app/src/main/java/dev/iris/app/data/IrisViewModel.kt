@@ -70,6 +70,9 @@ class IrisViewModel(app: Application) : AndroidViewModel(app) {
 
     /** The newest release the server knows of (it asks GitHub), and how updating this app is going. */
     var update by mutableStateOf<UpdateStatus?>(null)
+    /** A check the user asked for is running / its result ("Checked: …"), for the button's feedback. */
+    var updateChecking by mutableStateOf(false)
+    var updateCheckResult by mutableStateOf<String?>(null)
         private set
 
     /** 0..100 while the update downloads, otherwise null. */
@@ -427,6 +430,32 @@ class IrisViewModel(app: Application) : AndroidViewModel(app) {
     fun checkUpdate(refresh: Boolean = false) {
         val api = api ?: return
         viewModelScope.launch { runCatching { api.update(refresh) }.onSuccess { update = it } }
+    }
+
+    /** "Check now": the same look, with a spinner while it runs and a line saying what it found. */
+    fun checkUpdateNow() {
+        val api = api ?: run { updateCheckResult = "The server isn't connected, so it can't look right now."; return }
+        if (updateChecking) return
+        updateChecking = true
+        updateCheckResult = null
+        viewModelScope.launch {
+            val started = System.currentTimeMillis()
+            val result = runCatching { api.update(true) }
+            // Long enough to see that something happened, even when the answer is instant.
+            (600 - (System.currentTimeMillis() - started)).takeIf { it > 0 }?.let { kotlinx.coroutines.delay(it) }
+            result.onSuccess { update = it }
+            updateCheckResult = result.fold(
+                { s ->
+                    when {
+                        s.error != null -> "Couldn't reach GitHub: ${s.error}"
+                        phoneUpdate != null -> null
+                        else -> "Checked just now: you're up to date."
+                    }
+                },
+                { "The check didn't work: ${it.message ?: "no answer from the server"}" },
+            )
+            updateChecking = false
+        }
     }
 
     /** Downloads the new APK, checks it, and opens Android's installer. */

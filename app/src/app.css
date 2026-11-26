@@ -467,6 +467,34 @@ select:focus-visible {
   @apply btn text-danger hover:bg-danger-soft;
 }
 
+/* ---- press feedback (lib/press.ts) ------------------------------------- */
+/* A short flash on every clicked button: on touch screens :active alone is too brief to see. */
+.is-pressed:not(:disabled) {
+  animation: press-flash 260ms ease-out;
+}
+@keyframes press-flash {
+  0% { opacity: 1; }
+  25% { opacity: 0.6; }
+  100% { opacity: 1; }
+}
+/* A button waiting on the server (use:busy): dimmed, with a spinner, no more clicks. */
+button[aria-busy='true'] {
+  position: relative;
+  pointer-events: none;
+  opacity: 0.75;
+}
+button[aria-busy='true']::after {
+  content: '';
+  width: 13px;
+  height: 13px;
+  margin-left: 6px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  animation: spin 0.7s linear infinite;
+  flex: none;
+}
+
 /* ---- rendered Markdown in messages ------------------------------------- */
 .md {
   line-height: 1.7;

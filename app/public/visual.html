@@ -2,15 +2,25 @@
 <!--
   The frame a visual card in a reply runs in (Intelligent UI). The apps load this page
   in a sandbox and send it the visual's HTML; it writes that HTML into itself with the
-  I.R.I.S. style kit, then reports its height (and errors) back.
+  I.R.I.S. style kit and shortcuts, then reports its height (and errors) back.
+
+  Shortcuts (so the model writes a line instead of a page):
+    <div data-chart="bar|hbar|line|donut" data-labels="A,B" data-values="1,2"
+         data-series="X|Y" data-unit="%"></div>      a chart (line: series split by |)
+    <div class="stat"><b>42</b><span>label</span></div>   a stat tile (.value/.label too)
+    <div class="tabs"><section data-tab="Name">…</section>…</div>   tabs
+    <button data-send="text">Label</button>        sends "text" to the chat as the user
+    <form data-send="Book {date} for {n}">…</form>  sends the filled-in template
+  Theme colours are CSS variables (--accent, --text, --muted, --success, …).
 
   The visual is written by the model, so it is untrusted:
   - web and desktop: an <iframe sandbox="allow-scripts"> (an opaque origin: no access
     to the app's storage, token or DOM), and this page's own CSP allows no network;
   - Android: a WebView with network loads blocked.
-  This page refuses to run anywhere else (opened directly or framed without a sandbox).
-  The same file is served by the relay (/visual.html), the engine (/visual, for the
-  desktop app) and packed into the Android app.
+  A "send" is only a request: the app accepts it only right after the user touched the
+  card. This page refuses to run anywhere else (opened directly or framed without a
+  sandbox). The same file is served by the relay (/visual), the engine (/visual, for
+  the desktop app) and packed into the Android app.
 -->
 <html>
 <head>
@@ -28,47 +38,213 @@
 
   var KIT = [
     '*{box-sizing:border-box}',
-    'html,body{margin:0;background:transparent;color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}',
+    'html,body{margin:0;background:transparent;color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}',
     'body{padding:14px;overflow-wrap:anywhere}',
+    'body>*+*{margin-top:12px}',
     'h1,h2,h3,h4{margin:0 0 8px;font-weight:600;line-height:1.3}h1{font-size:20px}h2{font-size:17px}h3,h4{font-size:15px}',
-    'p{margin:0 0 8px}p:last-child{margin-bottom:0}ul,ol{margin:0 0 8px;padding-left:20px}',
+    'p{margin:0 0 8px}p:last-child{margin-bottom:0}ul,ol{margin:0 0 8px;padding-left:20px}li+li{margin-top:4px}',
     'a{color:var(--accent-hi)}',
     '.muted{color:var(--muted)}.faint{color:var(--faint)}.accent{color:var(--accent-hi)}.good{color:var(--success)}.bad{color:var(--danger)}.warn{color:var(--warn)}',
     '.small{font-size:13px}.big{font-size:22px;font-weight:600}',
     '.card{background:var(--elevated);border-radius:14px;padding:12px 14px}',
     '.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.col{display:flex;flex-direction:column;gap:10px}.spread{justify-content:space-between}',
     '.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}',
-    '.stat{background:var(--elevated);border-radius:14px;padding:12px 14px}.stat .value{font-size:24px;font-weight:600;line-height:1.2}.stat .label{font-size:12.5px;color:var(--muted)}',
-    'button,.btn{font:inherit;font-size:14px;color:var(--text);background:var(--hover);border:0;border-radius:999px;padding:8px 14px;cursor:pointer;-webkit-tap-highlight-color:transparent}',
+    '.stat{background:var(--elevated);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column}',
+    '.stat .value,.stat>b{font-size:24px;font-weight:600;line-height:1.2}.stat .label,.stat>span{font-size:12.5px;color:var(--muted)}',
+    'button,.btn{font:inherit;font-size:14px;color:var(--text);background:var(--hover);border:0;border-radius:999px;padding:9px 15px;cursor:pointer;transition:opacity .15s,background .15s}',
     'button.primary,.btn.primary{background:var(--accent);color:#fff}button.active{background:var(--accent-soft);color:var(--accent-hi)}',
-    'button:active{opacity:.7}button:disabled{opacity:.4}',
-    'input,select,textarea{font:inherit;font-size:14px;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 10px;max-width:100%}',
+    'button:active{opacity:.6}button:disabled{opacity:.4;cursor:default}',
+    '.choices{display:flex;flex-wrap:wrap;gap:8px}',
+    '[data-send].chosen{background:var(--accent);color:#fff;opacity:1}.choices.done>[data-send]:not(.chosen){opacity:.35}',
+    'input,select,textarea{font:inherit;font-size:14px;color:var(--text);background:var(--surface);border:1px solid var(--line-strong);border-radius:10px;padding:9px 11px;max-width:100%}',
+    'input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}',
+    'form{display:flex;flex-direction:column;gap:10px}form label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}',
     'input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:28px;padding:0;border:0;background:transparent}',
     'input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:99px;background:rgba(127,127,150,.3)}',
     'input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;margin-top:-7px;border:0;border-radius:50%;background:var(--accent)}',
     'input[type=range]::-moz-range-track{height:6px;border-radius:99px;background:rgba(127,127,150,.3)}',
     'input[type=range]::-moz-range-thumb{width:20px;height:20px;border:0;border-radius:50%;background:var(--accent)}',
-    'input[type=checkbox],input[type=radio]{accent-color:var(--accent);width:18px;height:18px;vertical-align:middle}',
-    'label{display:inline-flex;gap:8px;align-items:center}',
+    'input[type=checkbox],input[type=radio]{accent-color:var(--accent);width:18px;height:18px;margin:0;vertical-align:middle}',
+    'label:has(>input[type=checkbox]),label:has(>input[type=radio]){display:flex;flex-direction:row;gap:10px;align-items:center;font-size:15px;color:var(--text);padding:4px 0}',
+    'label:has(>input[type=checkbox]:checked){color:var(--muted);text-decoration:line-through}',
     'table{border-collapse:collapse;width:100%;font-size:14px}th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-weight:500}tr:last-child td{border-bottom:0}',
     '.bar{height:8px;border-radius:99px;background:var(--hover);overflow:hidden}.bar>i{display:block;height:100%;background:var(--accent);border-radius:99px;transition:width .3s}',
     '.chip{display:inline-block;font-size:12.5px;padding:3px 10px;border-radius:99px;background:var(--accent-soft);color:var(--accent-hi)}',
     'hr{border:0;border-top:1px solid var(--line);margin:12px 0}',
-    'svg{max-width:100%;height:auto}svg text{fill:var(--muted);font-family:inherit}',
-    'code,.mono{font-family:ui-monospace,Consolas,monospace;font-size:.92em}'
+    'svg{max-width:100%;height:auto;display:block}svg text{fill:var(--muted);font-family:inherit}',
+    'code,.mono{font-family:ui-monospace,Consolas,monospace;font-size:.92em}',
+    '.tabbar{display:flex;gap:6px;overflow-x:auto;margin-bottom:12px}.tabbar button{flex:none;padding:7px 13px;font-size:13.5px}',
+    '.tabbar button.on{background:var(--accent-soft);color:var(--accent-hi)}.tabs>section{display:none}.tabs>section.on{display:block}',
+    '.chart-legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;color:var(--muted);margin-top:8px}',
+    '.chart-legend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:6px;vertical-align:0}',
+    '.hbar{display:grid;grid-template-columns:minmax(60px,max-content) 1fr auto;gap:8px 10px;align-items:center;font-size:13.5px}',
+    '.hbar .bar{height:10px}.hbar b{font-weight:600;font-variant-numeric:tabular-nums}'
   ].join('\n');
 
-  // What runs inside the visual before its own code: size and error reports, and
-  // `iris` (the theme, for scripts that draw).
+  // What runs inside the visual before its own code: size and error reports, the
+  // shortcuts (charts, tabs, send), and `iris` (theme, send) for the visual's scripts.
   function runtime() {
     var host = window.IrisHost;
     function post(m) {
       if (host) host.post(JSON.stringify(m));
       else window.parent.postMessage(m, '*');
     }
+    var css = getComputedStyle(document.documentElement);
+    function v(name) { return css.getPropertyValue('--' + name).trim(); }
+    var PALETTE = ['accent', 'success', 'warn', 'accent-hi', 'danger', 'muted'].map(v);
+    window.iris = {
+      send: function (text) { post({ type: 'send', text: String(text).slice(0, 1000) }); },
+      color: function (i) { return PALETTE[i % PALETTE.length]; }
+    };
+
     window.addEventListener('error', function (e) {
       post({ type: 'error', message: String((e && e.message) || 'error').slice(0, 300) });
     });
+
+    function num(s) { var n = parseFloat(String(s).replace(/[^0-9.\-]/g, '')); return isNaN(n) ? 0 : n; }
+    function fmt(n, unit) {
+      var r = Math.abs(n) >= 100 ? Math.round(n) : Math.round(n * 10) / 10;
+      return (unit === '$' || unit === '€' ? unit + r : r + (unit || ''));
+    }
+    function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+    function list(el, name) { var a = el.getAttribute(name); return a == null || a === '' ? [] : a.split(name === 'data-values' || name === 'data-series' ? '|' : ',').map(function (x) { return x.trim(); }); }
+
+    function legend(names) {
+      if (names.length < 2) return '';
+      return '<div class="chart-legend">' + names.map(function (n, i) { return '<span><i style="background:' + iris.color(i) + '"></i>' + esc(n) + '</span>'; }).join('') + '</div>';
+    }
+
+    function chart(el) {
+      var type = (el.getAttribute('data-chart') || 'bar').toLowerCase();
+      var labels = list(el, 'data-labels');
+      var series = list(el, 'data-values').map(function (s) { return s.split(',').map(num); });
+      var names = list(el, 'data-series');
+      var unit = el.getAttribute('data-unit') || '';
+      if (!series.length) return;
+      var n = Math.max(labels.length, series[0].length);
+      var all = [].concat.apply([], series);
+      var max = num(el.getAttribute('data-max')) || Math.max.apply(null, all.concat([0]));
+      var min = Math.min.apply(null, all.concat([0]));
+      if (max === min) max = min + 1;
+
+      if (type === 'hbar') {
+        var vals = series[0];
+        el.innerHTML = '<div class="hbar">' + vals.map(function (x, i) {
+          return '<span>' + esc(labels[i] || '') + '</span><div class="bar"><i style="width:' + Math.max(0, x / max * 100) + '%;background:' + iris.color(0) + '"></i></div><b>' + fmt(x, unit) + '</b>';
+        }).join('') + '</div>';
+        return;
+      }
+      if (type === 'donut' || type === 'pie') {
+        var d = series[0], total = d.reduce(function (a, b) { return a + b; }, 0) || 1, off = 0, R = 15.9155;
+        var rings = d.map(function (x, i) {
+          var len = x / total * 100;
+          var s = '<circle r="' + R + '" cx="21" cy="21" fill="none" stroke="' + iris.color(i) + '" stroke-width="6" stroke-dasharray="' + len + ' ' + (100 - len) + '" stroke-dashoffset="' + (25 - off) + '"/>';
+          off += len;
+          return s;
+        }).join('');
+        var center = el.getAttribute('data-center');
+        el.innerHTML = '<div class="row" style="gap:16px;flex-wrap:nowrap"><svg viewBox="0 0 42 42" style="width:120px;flex:none">' + rings +
+          (center ? '<text x="21" y="23.5" text-anchor="middle" style="font-size:7px;font-weight:600;fill:var(--text)">' + esc(center) + '</text>' : '') +
+          '</svg><div class="col" style="gap:6px;font-size:13.5px">' + d.map(function (x, i) {
+            return '<span><i style="display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:8px;background:' + iris.color(i) + '"></i>' + esc(labels[i] || '') + ' <b>' + fmt(x, unit) + '</b> <span class="faint">' + Math.round(x / total * 100) + '%</span></span>';
+          }).join('') + '</div></div>';
+        return;
+      }
+
+      var W = 320, H = 170, L = 6, Rr = 6, T = 18, B = 22, iw = W - L - Rr, ih = H - T - B;
+      function y(x) { return T + ih - (x - min) / (max - min) * ih; }
+      var svg = '<line x1="' + L + '" x2="' + (W - Rr) + '" y1="' + y(0) + '" y2="' + y(0) + '" stroke="' + v('line-strong') + '"/>';
+      var step = iw / n;
+      var every = Math.ceil(n / 8);
+      for (var i = 0; i < n; i++) {
+        if (labels[i] && i % every === 0) svg += '<text x="' + (L + step * i + step / 2) + '" y="' + (H - 6) + '" text-anchor="middle" font-size="10.5">' + esc(labels[i]) + '</text>';
+      }
+      if (type === 'line' || type === 'area') {
+        series.forEach(function (s, k) {
+          var pts = s.map(function (x, i) { return (L + step * i + step / 2).toFixed(1) + ',' + y(x).toFixed(1); });
+          if (type === 'area' && series.length === 1) svg += '<polygon points="' + (L + step / 2) + ',' + y(0) + ' ' + pts.join(' ') + ' ' + (L + step * (s.length - 1) + step / 2) + ',' + y(0) + '" fill="' + iris.color(k) + '" opacity=".18"/>';
+          svg += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + iris.color(k) + '" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>';
+          if (s.length <= 16) s.forEach(function (x, i) { svg += '<circle cx="' + (L + step * i + step / 2) + '" cy="' + y(x) + '" r="2.8" fill="' + iris.color(k) + '"/>'; });
+          if (series.length === 1) {
+            var last = s.length - 1;
+            svg += '<text x="' + Math.min(W - Rr - 4, L + step * last + step / 2) + '" y="' + (y(s[last]) - 7) + '" text-anchor="end" font-size="10.5" style="fill:var(--text)">' + fmt(s[last], unit) + '</text>';
+          }
+        });
+      } else {
+        var groups = series.length, bw = Math.min(36, step * 0.7 / groups);
+        series.forEach(function (s, k) {
+          s.forEach(function (x, i) {
+            var cx = L + step * i + step / 2 - (groups * bw) / 2 + k * bw;
+            var top = Math.min(y(x), y(0)), h = Math.max(1, Math.abs(y(x) - y(0)));
+            svg += '<rect x="' + cx.toFixed(1) + '" y="' + top.toFixed(1) + '" width="' + (bw - 2).toFixed(1) + '" height="' + h.toFixed(1) + '" rx="3" fill="' + iris.color(k) + '"/>';
+            if (groups === 1 && n <= 12) svg += '<text x="' + (cx + bw / 2 - 1).toFixed(1) + '" y="' + (top - 5).toFixed(1) + '" text-anchor="middle" font-size="10" style="fill:var(--text)">' + fmt(x, unit) + '</text>';
+          });
+        });
+      }
+      el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '">' + svg + '</svg>' + legend(names);
+    }
+
+    function tabs(box) {
+      var sections = [].filter.call(box.children, function (c) { return c.hasAttribute('data-tab'); });
+      if (!sections.length) return;
+      var bar = document.createElement('div');
+      bar.className = 'tabbar';
+      sections.forEach(function (s, i) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = s.getAttribute('data-tab');
+        b.onclick = function () {
+          sections.forEach(function (x, j) { x.classList.toggle('on', j === i); bar.children[j].classList.toggle('on', j === i); });
+        };
+        bar.appendChild(b);
+      });
+      box.insertBefore(bar, box.firstChild);
+      bar.children[0].onclick();
+    }
+
+    // data-send: a tap answers for the user. The chosen button stays lit, the rest dim.
+    // Forms are handled here too: the web frame's sandbox has no allow-forms, so a
+    // real submit never fires there; a submit button's click (or Enter) sends instead.
+    function sendForm(f) {
+      var tpl = f.getAttribute('data-send');
+      var data = new FormData(f), parts = [];
+      data.forEach(function (val, key) { parts.push(key + ': ' + val); });
+      var text = tpl ? tpl.replace(/\{([\w-]+)\}/g, function (_, k) { var x = data.getAll(k); return x.length ? x.join(', ') : ''; }) : parts.join('\n');
+      var btn = f.querySelector('button[type=submit],button:not([type])');
+      if (btn) { btn.classList.add('chosen'); btn.disabled = true; }
+      if (text.trim()) iris.send(text);
+    }
+    function isSubmit(el) {
+      return el.tagName === 'BUTTON' ? (el.getAttribute('type') || 'submit') === 'submit' : el.tagName === 'INPUT' && el.type === 'submit';
+    }
+    document.addEventListener('click', function (e) {
+      var t = e.target.closest ? e.target : null;
+      if (!t) return;
+      var form = t.closest('form[data-send]');
+      var sub = t.closest('button,input[type=submit]');
+      if (form && sub && isSubmit(sub)) {
+        e.preventDefault();
+        if (!sub.disabled && form.reportValidity()) sendForm(form);
+        return;
+      }
+      var el = t.closest('[data-send]');
+      if (!el || el.tagName === 'FORM' || el.disabled) return;
+      var text = el.getAttribute('data-send') || el.textContent.trim();
+      if (!text) return;
+      el.classList.add('chosen');
+      if (el.parentElement) el.parentElement.classList.add('done');
+      iris.send(text);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' || e.target.tagName !== 'INPUT') return;
+      var form = e.target.closest('form[data-send]');
+      if (!form) return;
+      e.preventDefault();
+      var btn = form.querySelector('button[type=submit],button:not([type])');
+      if (!(btn && btn.disabled) && form.reportValidity()) sendForm(form);
+    });
+    document.addEventListener('submit', function (e) { e.preventDefault(); });
+
     var last = -1;
     function size() {
       var b = document.body;
@@ -77,6 +253,10 @@
       if (h !== last) { last = h; post({ type: 'size', height: h }); }
     }
     document.addEventListener('DOMContentLoaded', function () {
+      [].forEach.call(document.querySelectorAll('[data-chart]'), function (el) {
+        try { chart(el); } catch (err) { post({ type: 'error', message: 'chart: ' + err.message }); }
+      });
+      [].forEach.call(document.querySelectorAll('.tabs'), tabs);
       size();
       if (window.ResizeObserver) new ResizeObserver(size).observe(document.body);
     });
@@ -98,7 +278,7 @@
     document.write(
       '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
       '<style>:root{color-scheme:' + scheme + ';' + vars + '}\n' + KIT + '</style>' +
-      '<script>(' + runtime.toString() + ')();window.iris={theme:' + theme + '};<\/script>' +
+      '<script>(' + runtime.toString() + ')();iris.theme=' + theme + ';<\/script>' +
       '</head><body>' + d.html + '</body></html>'
     );
     document.close();

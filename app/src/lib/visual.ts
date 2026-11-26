@@ -5,6 +5,9 @@
 import { app } from './app.svelte';
 import { inDesktopApp, inWebLink } from './connection';
 
+/** Context key: how a visual card sends its answer to the chat (set by the chat view). */
+export const VISUAL_SEND = Symbol('visual-send');
+
 export type Segment =
   | { kind: 'md'; text: string }
   | { kind: 'visual'; title: string; html: string; closed: boolean };

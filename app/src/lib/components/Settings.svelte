@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { busy } from '../press';
   import {
     Activity,
     Sparkles,
@@ -1092,7 +1093,7 @@
                     </div>
                     <div class="mt-0.5 truncate font-mono text-[12px] text-faint max-sm:break-all max-sm:whitespace-normal" title="{p.base_url} · {p.default_model}">{p.base_url} · {p.default_model}</div>
                   </div>
-                  <button class="btn-outline px-3! py-1.5! text-[12.5px]!" onclick={() => testProvider(p.id)}>Test</button>
+                  <button class="btn-outline px-3! py-1.5! text-[12.5px]!" use:busy={() => testProvider(p.id)}>Test</button>
                   <button class="btn-ghost px-2.5!" onclick={() => editProvider(p)} aria-label="Edit"><Pencil size={14} /></button>
                   {#if deleteId === p.id}
                     <button class="btn-danger" onclick={() => removeProvider(p.id)}>Remove</button>
@@ -1169,7 +1170,7 @@
           placeholder="- Lives in Lisbon, Portugal; prefers °C and euros"
         ></textarea>
         <div class="mt-3 flex max-w-2xl justify-end">
-          <button class="btn-primary" onclick={saveUserMemory} disabled={userMemory.trim() === savedUserMemory.trim()}>
+          <button class="btn-primary" use:busy={saveUserMemory} disabled={userMemory.trim() === savedUserMemory.trim()}>
             Save
           </button>
         </div>
@@ -1205,7 +1206,7 @@
             </div>
             <div class="flex justify-end gap-2">
               <button class="btn-ghost" onclick={() => (skEdit = null)}>Cancel</button>
-              <button class="btn-primary" onclick={saveSkill} disabled={!skEdit.name.trim() || !skEdit.description.trim() || !skEdit.body.trim()}>Save</button>
+              <button class="btn-primary" use:busy={saveSkill} disabled={!skEdit.name.trim() || !skEdit.description.trim() || !skEdit.body.trim()}>Save</button>
             </div>
           </div>
         {/if}
@@ -1411,7 +1412,7 @@
             <p class="hint">Don't save card numbers here: keep cards on the website itself. Payments always need your OK.</p>
             <div class="flex justify-end gap-2">
               <button class="btn-ghost" onclick={() => (acEdit = null)}>Cancel</button>
-              <button class="btn-primary" onclick={saveAccount} disabled={!acEdit.name.trim() || !acEdit.site.trim()}>Save</button>
+              <button class="btn-primary" use:busy={saveAccount} disabled={!acEdit.name.trim() || !acEdit.site.trim()}>Save</button>
             </div>
           </div>
         {/if}
@@ -1522,7 +1523,7 @@
             </div>
             <div class="flex justify-end gap-2 pt-1">
               <button class="btn-ghost" onclick={() => (rtForm = null)}>Cancel</button>
-              <button class="btn-primary" onclick={saveRoutine} disabled={!rtForm.name.trim() || !rtForm.body.trim() || !rtForm.schedule.trim()}>
+              <button class="btn-primary" use:busy={saveRoutine} disabled={!rtForm.name.trim() || !rtForm.body.trim() || !rtForm.schedule.trim()}>
                 {rtForm.id ? 'Save changes' : 'Schedule'}
               </button>
             </div>
@@ -1565,7 +1566,7 @@
                     </div>
                   {/if}
                 </div>
-                <button class="btn-ghost px-2.5! text-[12px]!" onclick={() => app.api?.runRoutine(r.id).then(() => app.toast(`Running “${r.name}”`))}>
+                <button class="btn-ghost px-2.5! text-[12px]!" use:busy={() => app.api?.runRoutine(r.id).then(() => app.toast(`Running “${r.name}”`)).catch((e) => app.error(e))}>
                   <Play size={13} /> Run now
                 </button>
                 <button class="btn-ghost px-2.5! text-[12px]!" onclick={() => editRoutine(r)}><Pencil size={13} /> Edit</button>
@@ -1814,7 +1815,7 @@
           <div class="label">Create an access token</div>
           <div class="flex gap-2">
             <input class="input" bind:value={newDeviceName} placeholder="Device name, e.g. My phone" />
-            <button class="btn-outline shrink-0" onclick={createDevice} disabled={!newDeviceName.trim()}>Create</button>
+            <button class="btn-outline shrink-0" use:busy={createDevice} disabled={!newDeviceName.trim()}>Create</button>
           </div>
           {#if newToken}
             <div class="mt-3 rounded-lg bg-code p-3">
@@ -2024,7 +2025,12 @@
               <pre class="max-h-32 overflow-auto rounded-lg bg-surface p-2 text-[11px] text-muted">{u.last_update.log}</pre>
             {/if}
             <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-              <button class="btn-outline" onclick={() => app.checkUpdate(true)}>Check now</button>
+              <button class="btn-outline" disabled={app.updateChecking} onclick={() => app.checkUpdateNow()}>
+                {#if app.updateChecking}<LoaderCircle size={14} class="animate-spin" />Checking…{:else}Check now{/if}
+              </button>
+              {#if app.updateCheckResult}
+                <span class="text-[12.5px] {app.updateCheckResult.ok ? 'text-success' : 'text-danger'}">{app.updateCheckResult.text}</span>
+              {/if}
               <label class="flex items-center gap-2 text-[12.5px] text-muted">
                 <input
                   type="checkbox"

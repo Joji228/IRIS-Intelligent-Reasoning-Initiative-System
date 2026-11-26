@@ -6,8 +6,11 @@
   import AutoPicker from './AutoPicker.svelte';
   import ContextRing from './ContextRing.svelte';
   import ModelPicker from './ModelPicker.svelte';
-  import { tick } from 'svelte';
+  import { setContext, tick } from 'svelte';
   import { app } from '../app.svelte';
+  import { VISUAL_SEND } from '../visual';
+  // Visual cards in replies can answer for the user (a tapped choice, a filled form).
+  setContext(VISUAL_SEND, (text: string) => void app.send(text));
   import AgentAvatar from './AgentAvatar.svelte';
   import CreditBadge from './CreditBadge.svelte';
   import Composer from './Composer.svelte';

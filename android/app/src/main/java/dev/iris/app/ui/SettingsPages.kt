@@ -83,6 +83,7 @@ private fun RoutinesPage(vm: IrisViewModel, back: () -> Unit) {
     val overlays = LocalOverlays.current
     var routines by remember { mutableStateOf<List<Routine>?>(null) }
     var editing by remember { mutableStateOf<Routine?>(null) }
+    var starting by remember { mutableStateOf(setOf<String>()) }
     suspend fun load() { vm.attempt { routines() }?.let { routines = it } }
     LaunchedEffect(Unit) { load() }
 
@@ -122,8 +123,12 @@ private fun RoutinesPage(vm: IrisViewModel, back: () -> Unit) {
                     // Run now and Edit share the width; Delete is a red trash button so the row fits a phone.
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button("Run now", {
-                            scope.launch { vm.attempt { runRoutine(r.id) }?.let { vm.showToast("“${r.name}” started") } }
-                        }, Modifier.weight(1f), icon = Lucide.Play, primary = false, padding = PaddingValues(horizontal = 12.dp, vertical = 12.dp))
+                            starting = starting + r.id
+                            scope.launch {
+                                vm.attempt { runRoutine(r.id) }?.let { vm.showToast("“${r.name}” started") }
+                                starting = starting - r.id
+                            }
+                        }, Modifier.weight(1f), icon = Lucide.Play, primary = false, busy = r.id in starting, padding = PaddingValues(horizontal = 12.dp, vertical = 12.dp))
                         Button("Edit", { editing = r }, Modifier.weight(1f), icon = Lucide.Pencil, primary = false, padding = PaddingValues(horizontal = 12.dp, vertical = 12.dp))
                         DangerIconButton(Lucide.Trash, "Delete “${r.name}”") {
                             overlays.menu("Delete “${r.name}”?", listOf(MenuItem("Delete routine", Lucide.Trash, danger = true) {

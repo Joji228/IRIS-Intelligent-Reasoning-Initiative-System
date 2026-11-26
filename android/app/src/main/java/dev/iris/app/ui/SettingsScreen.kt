@@ -288,6 +288,7 @@ private fun ResponsesPage(vm: IrisViewModel, back: () -> Unit) {
     var memory by remember { mutableStateOf<MemoryText?>(null) }
     var memoryText by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    var savingMemory by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         vm.attempt { style() }?.let { saved = it; preset = it.preset; custom = it.custom }
         vm.attempt { userMemory() }?.let { memory = it; memoryText = it.text }
@@ -317,8 +318,12 @@ private fun ResponsesPage(vm: IrisViewModel, back: () -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Txt("${memoryText.trim().length} / ${m?.limit ?: "…"}", 12.sp, C.faint, modifier = Modifier.weight(1f))
                     Button("Save memory", {
-                        scope.launch { vm.attempt { putUserMemory(memoryText) }?.let { memory = it; memoryText = it.text; vm.showToast("Memory saved") } }
-                    }, enabled = m != null && memoryText != m.text)
+                        savingMemory = true
+                        scope.launch {
+                            vm.attempt { putUserMemory(memoryText) }?.let { memory = it; memoryText = it.text; vm.showToast("Memory saved") }
+                            savingMemory = false
+                        }
+                    }, enabled = m != null && memoryText != m.text, busy = savingMemory)
                 }
             }
         }
@@ -392,6 +397,7 @@ private fun SearchPage(vm: IrisViewModel, back: () -> Unit) {
     var provider by remember { mutableStateOf("auto") }
     var key by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    var removing by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { vm.attempt { search() }?.let { status = it; provider = it.provider } }
     Page("Web search", back) {
         item {
@@ -417,8 +423,12 @@ private fun SearchPage(vm: IrisViewModel, back: () -> Unit) {
                     }, enabled = status != null && (provider != status?.provider || key.isNotEmpty()), busy = busy)
                     if (status?.hasTavilyKey == true) {
                         Button("Remove key", {
-                            scope.launch { vm.attempt { putSearch(provider, "") }?.let { status = it; vm.showToast("Tavily key removed") } }
-                        }, primary = false)
+                            removing = true
+                            scope.launch {
+                                vm.attempt { putSearch(provider, "") }?.let { status = it; vm.showToast("Tavily key removed") }
+                                removing = false
+                            }
+                        }, primary = false, busy = removing)
                     }
                 }
             }
@@ -468,7 +478,16 @@ private fun AboutPage(vm: IrisViewModel, back: () -> Unit) {
                             else -> "No published release was found yet."
                         },
                     )
-                    Button("Check now", { vm.checkUpdate(true) }, icon = Lucide.Info, primary = false)
+                    Button(
+                        if (vm.updateChecking) "Checking…" else "Check now",
+                        { vm.checkUpdateNow() },
+                        icon = Lucide.Info,
+                        primary = false,
+                        busy = vm.updateChecking,
+                    )
+                    vm.updateCheckResult?.let {
+                        Txt(it, 12.5.sp, if (it.startsWith("Checked")) C.success else C.danger)
+                    }
                 }
                 vm.updateNote?.let { Txt(it, 12.5.sp, C.danger) }
             }

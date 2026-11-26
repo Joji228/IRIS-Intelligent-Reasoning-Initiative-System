@@ -4,6 +4,9 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
+import android.view.MotionEvent
+import androidx.compose.runtime.staticCompositionLocalOf
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -48,6 +51,16 @@ import kotlin.math.roundToInt
 // network or open links, inside the shared frame (app/public/visual.html, packed into
 // the app's assets), which adds the I.R.I.S. style kit and reports the page's height.
 
+/**
+ * Sends a card's answer (a `data-send` button or form) to the chat as the user. Provided
+ * by the chat screen; elsewhere (release notes, say) cards can't send.
+ */
+val LocalVisualSend = staticCompositionLocalOf<((String) -> Unit)?> { null }
+
+/** A card may send only this soon after a real touch on it, and not more often than this. */
+private const val SEND_AFTER_TOUCH_MS = 2500L
+private const val SEND_GAP_MS = 1500L
+
 /** The tallest a card gets in the chat; taller visuals scroll, or open full screen. */
 private const val MAX_HEIGHT = 560
 
@@ -82,11 +95,26 @@ private class Bridge(private val onMessage: (JSONObject) -> Unit) {
     }
 }
 
-@SuppressLint("SetJavaScriptEnabled")
-private fun visualView(context: Context, html: String, fontScale: Float, onSize: (Int) -> Unit, onError: (String) -> Unit): WebView {
+@SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
+private fun visualView(
+    context: Context,
+    html: String,
+    fontScale: Float,
+    onSize: (Int) -> Unit,
+    onError: (String) -> Unit,
+    onSend: ((String) -> Unit)?,
+): WebView {
     val view = WebView(context)
     val payload = JSONObject().put("type", "render").put("html", html).put("theme", theme()).toString()
     var sent = false
+    // A visual's own code can ask to send at any time; only a request right after the
+    // user's finger left the card counts (touches are seen here, outside the page).
+    var lastTouch = 0L
+    var lastSend = 0L
+    view.setOnTouchListener { _, e ->
+        if (e.actionMasked == MotionEvent.ACTION_UP) lastTouch = SystemClock.uptimeMillis()
+        false
+    }
     view.setBackgroundColor(android.graphics.Color.TRANSPARENT)
     view.isVerticalScrollBarEnabled = false
     view.isHorizontalScrollBarEnabled = false
@@ -122,6 +150,14 @@ private fun visualView(context: Context, html: String, fontScale: Float, onSize:
                 }
                 "size" -> onSize(msg.optInt("height").coerceAtLeast(0))
                 "error" -> onError(msg.optString("message").take(200))
+                "send" -> {
+                    val now = SystemClock.uptimeMillis()
+                    val text = msg.optString("text").trim().take(1000)
+                    if (onSend != null && text.isNotEmpty() && now - lastTouch < SEND_AFTER_TOUCH_MS && now - lastSend > SEND_GAP_MS) {
+                        lastSend = now
+                        onSend(text)
+                    }
+                }
             }
         },
         "IrisHost",
@@ -139,6 +175,7 @@ fun VisualCard(title: String, html: String, closed: Boolean) {
     var height by remember(key) { mutableIntStateOf(heights[key] ?: 0) }
     var error by remember(key) { mutableStateOf<String?>(null) }
     val fontScale = LocalDensity.current.fontScale
+    val send = LocalVisualSend.current
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(Radius.md)).background(C.surface)) {
         Row(Modifier.fillMaxWidth().padding(start = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Lucide.Sparkles, C.accentHi, 16.dp)
@@ -161,7 +198,7 @@ fun VisualCard(title: String, html: String, closed: Boolean) {
             else -> Box(Modifier.fillMaxWidth().height(if (height > 0) height.coerceAtMost(MAX_HEIGHT).dp else 120.dp)) {
                 AndroidView(
                     factory = { ctx ->
-                        visualView(ctx, html, fontScale, onSize = { if (it > 0) { height = it; heights[key] = it } }, onError = { error = it })
+                        visualView(ctx, html, fontScale, onSize = { if (it > 0) { height = it; heights[key] = it } }, onError = { error = it }, onSend = send)
                     },
                     modifier = Modifier.fillMaxSize(),
                     onRelease = { it.destroy() },
@@ -173,12 +210,12 @@ fun VisualCard(title: String, html: String, closed: Boolean) {
             Txt("This visual hit an error: $it", 12.sp, C.danger, modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 12.dp), maxLines = 2)
         }
     }
-    if (full) VisualFullScreen(title, html) { full = false }
+    if (full) VisualFullScreen(title, html, send?.let { s -> { text: String -> full = false; s(text) } }) { full = false }
 }
 
 /** A visual on its own screen, scrolling if it's tall. */
 @Composable
-private fun VisualFullScreen(title: String, html: String, onClose: () -> Unit) {
+private fun VisualFullScreen(title: String, html: String, onSend: ((String) -> Unit)?, onClose: () -> Unit) {
     val fontScale = LocalDensity.current.fontScale
     Dialog(onClose, DialogProperties(usePlatformDefaultWidth = false)) {
         Column(Modifier.fillMaxSize().background(C.bg).systemBarsPadding()) {
@@ -188,7 +225,7 @@ private fun VisualFullScreen(title: String, html: String, onClose: () -> Unit) {
                 IconButton(Lucide.X, onClose, tint = C.muted, size = 24.dp)
             }
             AndroidView(
-                factory = { ctx -> visualView(ctx, html, fontScale, onSize = {}, onError = {}) },
+                factory = { ctx -> visualView(ctx, html, fontScale, onSize = {}, onError = {}, onSend = onSend) },
                 modifier = Modifier.fillMaxSize(),
                 onRelease = { it.destroy() },
             )

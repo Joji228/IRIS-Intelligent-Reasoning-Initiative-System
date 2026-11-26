@@ -204,10 +204,8 @@ fun SheetTitle(text: String) =
 fun Modifier.pressLong(onLong: () -> Unit, onClick: () -> Unit): Modifier = composed {
     val haptics = LocalHapticFeedback.current
     val source = remember { MutableInteractionSource() }
-    val pressed by source.collectIsPressedAsState()
-    // The same plain dim as [press]: no shrinking, no bounce.
-    val dim by animateFloatAsState(if (pressed) 1f else 0f, if (pressed) tween(70) else tween(180, easing = Motion.ease), label = "press")
-    graphicsLayer { alpha = 1f - 0.3f * dim }
+    // The same dim as [press].
+    pressDim(source)
         .combinedClickable(
             interactionSource = source,
             indication = null,

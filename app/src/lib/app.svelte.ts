@@ -127,6 +127,9 @@ class IrisApp {
   update = $state<UpdateStatus | null>(null);
   /** The engine said agents are working; the banner asks before stopping them. */
   updateAsk = $state<string | null>(null);
+  /** "Check now" is running / what it found, for the button's feedback. */
+  updateChecking = $state(false);
+  updateCheckResult = $state<{ ok: boolean; text: string } | null>(null);
   /** An update is under way and this page is waiting for the engine to come back. */
   updateWatching = $state(false);
   private updateTimer: ReturnType<typeof setInterval> | null = null;
@@ -661,6 +664,30 @@ class IrisApp {
       this.update = await this.api.update(refresh);
     } catch {
       // An older engine has no updates yet, or GitHub can't be reached: nothing to show.
+    }
+  }
+
+  /** "Check now": the same look, with a spinner while it runs and a line saying what it found. */
+  async checkUpdateNow() {
+    if (!this.api || this.updateChecking) return;
+    this.updateChecking = true;
+    this.updateCheckResult = null;
+    const started = Date.now();
+    try {
+      const u = await this.api.update(true);
+      this.update = u;
+      this.updateCheckResult = u.error
+        ? { ok: false, text: `Couldn't reach GitHub: ${u.error}` }
+        : u.available
+          ? null
+          : { ok: true, text: "Checked just now: you're up to date." };
+    } catch (e) {
+      this.updateCheckResult = { ok: false, text: `The check didn't work: ${e instanceof Error ? e.message : 'no answer'}` };
+    } finally {
+      // Long enough to see that something happened, even when the answer is instant.
+      const left = 600 - (Date.now() - started);
+      if (left > 0) await new Promise((r) => setTimeout(r, left));
+      this.updateChecking = false;
     }
   }
 

@@ -4,7 +4,8 @@
   // it can't reach the app's storage, token or page; the frame's own CSP blocks the
   // network. It only tells us its height and any error.
   import { Code, Maximize2, Sparkles, X } from '@lucide/svelte';
-  import { frameUrl, visualTheme } from '../visual';
+  import { getContext } from 'svelte';
+  import { frameUrl, visualTheme, VISUAL_SEND } from '../visual';
 
   let { title, html, closed }: { title: string; html: string; closed: boolean } = $props();
 
@@ -13,6 +14,20 @@
   let full = $state(false);
   let height = $state(0);
   let error = $state<string | null>(null);
+  const sendToChat = getContext<((text: string) => void) | undefined>(VISUAL_SEND);
+  let lastSend = 0;
+
+  /** A card's own code can ask to send at any time; only a request while the user has just
+   *  interacted with the page (the browser's user activation, which a click inside the
+   *  frame also gives this page, and which no script can fake) counts. */
+  function send(text: unknown) {
+    const t = String(text ?? '').trim().slice(0, 1000);
+    const active = navigator.userActivation ? navigator.userActivation.isActive : true;
+    if (!sendToChat || !t || !active || Date.now() - lastSend < 1500) return;
+    lastSend = Date.now();
+    full = false;
+    sendToChat(t);
+  }
 
   /** Hooks a frame up: sends the visual when the frame is ready, takes its height. */
   function frame(node: HTMLIFrameElement, onSize: (h: number) => void) {
@@ -24,6 +39,8 @@
         node.contentWindow?.postMessage({ type: 'render', html, theme: visualTheme() }, '*');
       } else if (d.type === 'size' && typeof d.height === 'number') {
         onSize(Math.max(0, Math.ceil(d.height)));
+      } else if (d.type === 'send') {
+        send(d.text);
       } else if (d.type === 'error') {
         error = String(d.message ?? 'error').slice(0, 200);
       }

@@ -45,16 +45,20 @@ question you may hand sub-questions to agents in parallel.
 a \"Sources\" list: [n] Title — URL. Say plainly what you couldn't verify.";
 /// Visual cards (Intelligent UI): replies to the user may carry a small interactive
 /// page, which the apps render in a sandboxed frame (app/public/visual.html).
-const VISUAL_RULE: &str = "\n\nVisuals: when it explains something much better than text (comparing options, numbers \
-or trends, a process in steps, a quick calculator, converter or what-if slider), you may add one small interactive \
-visual to a reply. Write it as a fenced code block whose info line is `visual` and a short title (```visual Title), \
-holding an HTML fragment (no <html>, <head> or <body>) with inline <style> and <script> if needed. It runs in a \
-sandbox with no network: no external scripts, fonts, images or requests; draw charts with inline SVG. The app styles \
-plain HTML for its dark theme and offers CSS variables (--text, --muted, --faint, --accent, --accent-hi, \
---accent-soft, --surface, --elevated, --hover, --line, --success, --danger, --warn) and classes: .card, .row, .col, \
-.grid, .spread, .stat (with .value and .label inside), .bar>i (set its width), .chip, button.primary, .muted, .good, \
-.bad, .small, .big. Design for a phone (about 360 px wide), keep it under about 120 lines, and still give the key \
-answer in the text. Most replies need no visual; never add one just for decoration.";
+const VISUAL_RULE: &str = "\n\nVisual cards: the app renders a ```visual Title block (an HTML fragment) as a live, \
+interactive card. Use one when the answer is easier to see or act on than to read: numbers, trends or comparisons \
+(chart, stat tiles, table), options for the user to pick (answer buttons instead of asking in text), a plan or \
+checklist, a status overview, a calculator or what-if slider. Skip it for short or conversational replies. The app \
+styles plain HTML; use these shortcuts and write little or no CSS:
+- chart: <div data-chart=\"bar|hbar|line|area|donut\" data-labels=\"Mon,Tue\" data-values=\"3,5\" data-unit=\"%\"></div> \
+(several series: data-values=\"1,2|3,4\" data-series=\"A|B\"; donut: data-center=\"42%\")
+- tiles: <div class=\"grid\"><div class=\"stat\"><b>4</b><span>cores</span></div></div>
+- tabs: <div class=\"tabs\"><section data-tab=\"Name\">…</section></div>
+- answers: <div class=\"choices\"><button data-send=\"Restart it now\">Restart</button></div> sends that text as the \
+user's reply; <form data-send=\"Plan {days} days in {city}\"> with named inputs and a submit button sends the filled text
+- also .card .row .col .spread .chip .muted .good .bad .warn, <table>, checkbox lists, <input type=range>, inline \
+<script> (theme colours are CSS vars like --accent; iris.send(text) answers from a script).
+No network, external files or images. Phone width (~360px). Keep the text to what the card doesn't show.";
 
 /// How a message spoken on a voice call starts (the phone app adds it and shows
 /// it as a small phone chip).
@@ -1090,7 +1094,11 @@ impl Reply<'_> {
             past.iter().rev().filter(|m| !m.attachments.is_empty()).map(|m| m.id.as_str()).collect();
         let recent_images: Vec<String> = with_files.iter().take(RECENT_IMAGE_MESSAGES).map(|s| s.to_string()).collect();
         let recent_files: Vec<String> = with_files.iter().take(2).map(|s| s.to_string()).collect();
+        // Visual cards stay whole only in the latest reply (so "change the chart" works);
+        // older ones go back as a one-line stub.
+        let latest_reply = past.iter().rev().find(|m| m.role == MessageRole::Assistant).map(|m| m.id.clone());
         for m in past.into_iter().skip(skip) {
+            let whole = latest_reply.as_deref() == Some(m.id.as_str());
             match m.role {
                 MessageRole::User if !m.attachments.is_empty() => {
                     let (text, images) = self.with_attachments(&m, recent_images.contains(&m.id), recent_files.contains(&m.id));
@@ -1099,7 +1107,8 @@ impl Reply<'_> {
                 MessageRole::User => history.push(ChatMessage::new(Role::User, m.content)),
                 MessageRole::Assistant if m.rounds.is_empty() => {
                     if !m.content.is_empty() {
-                        history.push(ChatMessage::assistant(m.content, m.reasoning, Vec::new()));
+                        let content = if whole { m.content } else { shrink_visuals(&m.content) };
+                        history.push(ChatMessage::assistant(content, m.reasoning, Vec::new()));
                     }
                 }
                 MessageRole::Assistant => {
@@ -1118,7 +1127,8 @@ impl Reply<'_> {
                             .iter()
                             .map(|s| ToolCall { id: s.id.clone(), name: s.name.clone(), arguments: s.arguments.clone() })
                             .collect();
-                        history.push(ChatMessage::assistant(round.content, round.reasoning, calls));
+                        let content = if whole { round.content } else { shrink_visuals(&round.content) };
+                        history.push(ChatMessage::assistant(content, round.reasoning, calls));
                         for s in steps {
                             // The model already used this; a short version keeps the gist.
                             let output = if s.output.is_empty() {
@@ -1139,6 +1149,37 @@ impl Reply<'_> {
 
 /// The agent's instructions plus what it needs to know about its situation:
 /// the date, which model it runs on, the user's preferred style and its tools.
+/// A visual card's HTML is most of a reply's tokens and the model doesn't need it
+/// again (it can rebuild a card from the facts), so old ones are sent back as a stub.
+fn shrink_visuals(text: &str) -> String {
+    if !text.contains("```visual") {
+        return text.to_owned();
+    }
+    let mut out = String::with_capacity(text.len() / 4);
+    let mut lines = text.lines();
+    while let Some(line) = lines.next() {
+        match line.trim_start().strip_prefix("```visual") {
+            Some(rest) if rest.is_empty() || rest.starts_with(' ') => {
+                for l in lines.by_ref() {
+                    if l.trim_start().starts_with("```") {
+                        break;
+                    }
+                }
+                let title = rest.trim();
+                out.push_str(&format!("[visual card shown: {}]\n", if title.is_empty() { "untitled" } else { title }));
+            }
+            _ => {
+                out.push_str(line);
+                out.push('\n');
+            }
+        }
+    }
+    if !text.ends_with('\n') {
+        out.pop();
+    }
+    out
+}
+
 fn system_prompt(state: &AppState, agent: &Agent, thread_id: &str, conn: &Conn, research: bool, voice: bool) -> String {
     // Order matters for cost: providers cache the unchanging start of a
     // request, so stable text comes first and what changes (memory, summary,
@@ -1270,6 +1311,16 @@ mod tests {
             "prompt_tokens": null, "completion_tokens": null, "context_tokens": null, "created_at": 0
         }))
         .unwrap()
+    }
+
+    #[test]
+    fn old_visual_cards_go_back_as_a_stub() {
+        let reply = "Here you go.\n\n```visual CPU load\n<div class=\"grid\">x</div>\n```\n\nDone.";
+        assert_eq!(shrink_visuals(reply), "Here you go.\n\n[visual card shown: CPU load]\n\nDone.");
+        // Other code blocks are left alone.
+        let code = "```js\nlet a = 1;\n```";
+        assert_eq!(shrink_visuals(code), code);
+        assert_eq!(shrink_visuals("```visualize\nx\n```"), "```visualize\nx\n```");
     }
 
     #[test]
