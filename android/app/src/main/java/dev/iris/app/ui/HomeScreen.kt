@@ -60,7 +60,7 @@ fun HomeScreen(vm: IrisViewModel) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(top = 4.dp, bottom = 40.dp)) {
         item("bar") {
             Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 4.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Image(painterResource(R.drawable.iris_logo), null, Modifier.size(32.dp).clip(RoundedCornerShape(10.dp)))
+                Image(painterResource(R.drawable.iris_logo), null, Modifier.size(32.dp).clip(RoundedCornerShape(Radius.sm)))
                 Txt("I.R.I.S.", 15.sp, C.text, FontWeight.SemiBold, Modifier.padding(start = 10.dp).weight(1f))
                 vm.balance?.let { Pill { Txt(it, 12.sp, C.muted, FontWeight.Medium) } }
                 IconButton(Lucide.Settings, { vm.open(Screen.Settings()) }, C.muted, 22.dp)
@@ -86,8 +86,7 @@ fun HomeScreen(vm: IrisViewModel) {
             item("update") {
                 Row(
                     Modifier.animateItem().padding(start = 16.dp, end = 16.dp, top = 14.dp).fillMaxWidth()
-                        .background(C.accentSoft, RoundedCornerShape(20.dp))
-                        .border(1.dp, C.accent.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
+                        .background(C.accentSoft, RoundedCornerShape(Radius.lg))
                         .press { vm.open(Screen.Settings("about")) }.padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -107,8 +106,7 @@ fun HomeScreen(vm: IrisViewModel) {
                 val n = vm.problems.size
                 Row(
                     Modifier.animateItem().padding(start = 16.dp, end = 16.dp, top = 14.dp).fillMaxWidth()
-                        .background(C.danger.copy(alpha = 0.08f), RoundedCornerShape(20.dp))
-                        .border(1.dp, C.danger.copy(alpha = 0.3f), RoundedCornerShape(20.dp))
+                        .background(C.danger.copy(alpha = 0.1f), RoundedCornerShape(Radius.lg))
                         .press { vm.open(Screen.Settings("problems")) }.padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -141,7 +139,7 @@ fun HomeScreen(vm: IrisViewModel) {
         if (agents.size < MAX_AGENTS) {
             item("new") {
                 Row(
-                    Modifier.padding(horizontal = 8.dp).fillMaxWidth().clip(RoundedCornerShape(22.dp))
+                    Modifier.padding(horizontal = 8.dp).fillMaxWidth().clip(RoundedCornerShape(Radius.lg))
                         // A long press does nothing: only a deliberate tap summons an orb.
                         .pressLong(onLong = {}) { vm.summonAgent() }
                         .padding(horizontal = 12.dp, vertical = 12.dp),
@@ -185,7 +183,7 @@ private fun AgentRow(vm: IrisViewModel, agent: Agent) {
     val unread = vm.unread[agent.id] == true
     val preview = vm.previews[agent.id]
     Row(
-        Modifier.padding(horizontal = 8.dp).fillMaxWidth().clip(RoundedCornerShape(22.dp))
+        Modifier.padding(horizontal = 8.dp).fillMaxWidth().clip(RoundedCornerShape(Radius.lg))
             .pressLong(onLong = { agentMenu(vm, overlays, agent) }) { vm.openAgent(agent.id) }
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -252,8 +250,7 @@ fun ApprovalCard(vm: IrisViewModel, a: PendingApproval, showAgent: Boolean = tru
     val agent = vm.agent(a.agentId)
     Column(
         Modifier.fillMaxWidth()
-            .background(C.warn.copy(alpha = 0.05f), RoundedCornerShape(22.dp))
-            .border(1.dp, C.warn.copy(alpha = 0.35f), RoundedCornerShape(22.dp))
+            .background(C.warn.copy(alpha = 0.09f), RoundedCornerShape(Radius.lg))
             .press { vm.openAgent(a.agentId) }
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -273,11 +270,12 @@ fun ApprovalCard(vm: IrisViewModel, a: PendingApproval, showAgent: Boolean = tru
 }
 
 /** An agent's actions (the desktop's orb right-click menu). */
-fun agentMenu(vm: IrisViewModel, overlays: Overlays, agent: Agent, inChat: Boolean = false) {
+fun agentMenu(vm: IrisViewModel, overlays: Overlays, agent: Agent, inChat: Boolean = false, extra: List<MenuItem> = emptyList()) {
     val busy = vm.isWorking(agent.id)
     overlays.menu(
         title = agent.name,
         items = buildList {
+            addAll(extra)
             if (!inChat) add(MenuItem("Open chat", Lucide.ChevronRight) { vm.openAgent(agent.id) })
             add(MenuItem("Edit agent", Lucide.Pencil) { vm.open(Screen.AgentEdit(agent.id)) })
             add(MenuItem("Compact the chat", Lucide.Archive, enabled = !busy) { vm.compactChat(agent.id) })

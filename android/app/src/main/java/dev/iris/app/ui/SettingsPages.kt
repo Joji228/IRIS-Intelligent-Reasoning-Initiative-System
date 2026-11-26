@@ -352,7 +352,7 @@ private fun DevicesPage(vm: IrisViewModel, back: () -> Unit) {
             val me = d.name == vm.deviceName && !d.local
             Card {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Box(Modifier.size(34.dp).background(C.accentSoft, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(34.dp).background(C.accentSoft, RoundedCornerShape(Radius.sm)), contentAlignment = Alignment.Center) {
                         val phone = Regex("phone|android|iphone|ipad|app\\)", RegexOption.IGNORE_CASE).containsMatchIn(d.name)
                         Icon(if (d.local) Lucide.Server else if (phone) Lucide.Smartphone else Lucide.Globe, C.accentHi, 17.dp)
                     }

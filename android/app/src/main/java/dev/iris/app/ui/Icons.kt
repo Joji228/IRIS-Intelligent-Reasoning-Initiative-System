@@ -249,5 +249,5 @@ object Lucide {
 
 @Composable
 fun Icon(icon: ImageVector, tint: Color, size: Dp = 16.dp, modifier: Modifier = Modifier) {
-    Image(icon, contentDescription = null, modifier = modifier.size(size), colorFilter = ColorFilter.tint(tint))
+    Image(icon, contentDescription = null, modifier = modifier.size(IconSize.snap(size)), colorFilter = ColorFilter.tint(tint))
 }

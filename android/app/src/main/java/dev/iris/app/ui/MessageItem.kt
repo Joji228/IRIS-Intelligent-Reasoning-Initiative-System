@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -127,8 +128,8 @@ private fun TaskMessage(vm: IrisViewModel, message: Message, agent: Agent?) {
             Txt(clock(message.createdAt), 11.sp, C.faint)
         }
         Column(
-            Modifier.padding(top = 8.dp).fillMaxWidth().background(C.surface, RoundedCornerShape(14.dp))
-                .border(1.dp, C.line, RoundedCornerShape(14.dp)).padding(horizontal = 14.dp, vertical = 10.dp),
+            Modifier.padding(top = 8.dp).fillMaxWidth().background(C.surface, RoundedCornerShape(Radius.md))
+                .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Markdown(body, size = 14.5f)
@@ -142,7 +143,7 @@ private fun TaskMessage(vm: IrisViewModel, message: Message, agent: Agent?) {
 private fun Note(icon: androidx.compose.ui.graphics.vector.ImageVector, tint: androidx.compose.ui.graphics.Color, text: () -> String) {
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         Row(
-            Modifier.widthIn(max = 520.dp).background(C.surface, RoundedCornerShape(16.dp)).padding(horizontal = 12.dp, vertical = 6.dp),
+            Modifier.widthIn(max = 520.dp).background(C.surface, RoundedCornerShape(Radius.md)).padding(horizontal = 12.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Icon(icon, tint, 12.dp, Modifier.padding(top = 2.dp))
@@ -164,7 +165,7 @@ private fun UserMessage(vm: IrisViewModel, message: Message) {
                 image?.let {
                     Image(
                         it, a.name, contentScale = ContentScale.Crop,
-                        modifier = Modifier.heightIn(max = 200.dp).widthIn(max = 240.dp).clip(RoundedCornerShape(14.dp)),
+                        modifier = Modifier.heightIn(max = 200.dp).widthIn(max = 240.dp).clip(RoundedCornerShape(Radius.md)),
                     )
                 } ?: FileChip(a.name)
             } else FileChip(a.name)
@@ -175,7 +176,6 @@ private fun UserMessage(vm: IrisViewModel, message: Message) {
             val time = clock(message.createdAt)
             Column(
                 Modifier.widthIn(max = 310.dp)
-                    .shadow(10.dp, ME_SHAPE, ambientColor = C.bubbleMe, spotColor = C.bubbleMe)
                     .background(C.bubbleMe, ME_SHAPE)
                     .padding(start = 15.dp, end = 12.dp, top = 9.dp, bottom = 7.dp),
             ) {
@@ -218,7 +218,7 @@ private fun UserMessage(vm: IrisViewModel, message: Message) {
 @Composable
 private fun FileChip(name: String) {
     Row(
-        Modifier.background(C.elevated, RoundedCornerShape(12.dp)).border(1.dp, C.line, RoundedCornerShape(12.dp))
+        Modifier.background(C.elevated, RoundedCornerShape(Radius.sm))
             .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -253,8 +253,8 @@ private fun AssistantMessage(vm: IrisViewModel, message: Message, agent: Agent?,
     val context = LocalContext.current
 
     Column(Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(start = 2.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Orb(agent, 26.dp, working = streaming)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Orb(agent, 28.dp, working = streaming)
             Txt(agent?.name ?: "Agent", 13.5.sp, C.text, FontWeight.SemiBold)
             Txt(clock(message.createdAt), 11.sp, C.faint)
         }
@@ -286,8 +286,8 @@ private fun AssistantMessage(vm: IrisViewModel, message: Message, agent: Agent?,
             else if (streaming && lastRound.content.isNotEmpty() && lastRound.tools.isEmpty()) Caret()
             when (message.status) {
                 "error" -> Row(
-                    Modifier.fillMaxWidth().background(C.dangerSoft, RoundedCornerShape(14.dp))
-                        .border(1.dp, C.danger.copy(alpha = 0.3f), RoundedCornerShape(14.dp)).padding(12.dp),
+                    Modifier.fillMaxWidth().background(C.dangerSoft, RoundedCornerShape(Radius.md))
+                        .padding(12.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     Icon(Lucide.CircleAlert, C.danger, 16.dp, Modifier.padding(top = 1.dp))
@@ -299,14 +299,16 @@ private fun AssistantMessage(vm: IrisViewModel, message: Message, agent: Agent?,
                 }
                 "cancelled" -> Txt("Stopped", 12.5.sp, C.faint)
             }
-            if (!streaming && message.content.isNotEmpty()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            // Only under the latest reply (older ones can still be selected and copied), and
+            // pulled left so the copy icon lines up with the text instead of sitting indented.
+            if (!streaming && message.content.isNotEmpty() && isLast) {
+                Row(Modifier.offset(x = (-12).dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(Lucide.Copy, {
                         (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
                             .setPrimaryClip(ClipData.newPlainText("reply", message.content))
                     }, size = 17.dp, modifier = Modifier.size(44.dp))
                     if (isLast) IconButton(Lucide.RotateCcw, { vm.regenerate() }, size = 17.dp, modifier = Modifier.size(44.dp))
-                    message.model?.let { Txt(modelName(it), 11.sp, C.faint, modifier = Modifier.padding(start = 6.dp)) }
+                    message.model?.let { Txt(modelName(it), 11.sp, C.faint, modifier = Modifier.padding(start = 4.dp)) }
                 }
             }
         }
@@ -354,7 +356,7 @@ private fun args(step: ToolStep): JsonObject? = runCatching { Json.parseToJsonEl
 private val prettyJson = Json { prettyPrint = true }
 
 @Composable
-fun ToolCard(vm: IrisViewModel, step: ToolStep) {
+fun ToolCard(vm: IrisViewModel, step: ToolStep, flat: Boolean = false) {
     val a = remember(step.arguments) { args(step) }
     val command = (a?.get("command") as? JsonPrimitive)?.content.orEmpty()
     val pretty = remember(a) { if (a != null && a.isNotEmpty()) prettyJson.encodeToString(JsonObject.serializer(), a) else "" }
@@ -362,8 +364,8 @@ fun ToolCard(vm: IrisViewModel, step: ToolStep) {
     if (step.status == "awaiting_approval" && step.approvalId != null) {
         val detail = vm.approvals[step.approvalId]?.detail
         Column(
-            Modifier.fillMaxWidth().background(C.warn.copy(alpha = 0.06f), RoundedCornerShape(14.dp))
-                .border(1.dp, C.warn.copy(alpha = 0.4f), RoundedCornerShape(14.dp)).padding(14.dp),
+            Modifier.fillMaxWidth().background(C.warn.copy(alpha = 0.09f), RoundedCornerShape(Radius.md))
+                .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -386,8 +388,9 @@ fun ToolCard(vm: IrisViewModel, step: ToolStep) {
 
     var open by remember { mutableStateOf(false) }
     Column(
-        Modifier.fillMaxWidth().background(C.surface.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
-            .border(1.dp, C.line, RoundedCornerShape(12.dp)).animateContentSize(),
+        // Inside the work box it's a plain line, not a box in a box.
+        Modifier.fillMaxWidth().background(if (flat) Color.Transparent else C.surface, RoundedCornerShape(Radius.md))
+            .animateContentSize(),
     ) {
         Row(
             Modifier.fillMaxWidth().press { open = !open }.padding(horizontal = 10.dp, vertical = 9.dp),
@@ -396,7 +399,7 @@ fun ToolCard(vm: IrisViewModel, step: ToolStep) {
         ) {
             val err = step.status == "error"
             Box(
-                Modifier.size(24.dp).background(if (err) C.dangerSoft else C.accentSoft, RoundedCornerShape(7.dp)),
+                Modifier.size(24.dp).background(if (err) C.dangerSoft else C.accentSoft, RoundedCornerShape(Radius.sm)),
                 contentAlignment = Alignment.Center,
             ) { Icon(toolIcon(step.name), if (err) C.danger else C.accentHi, 13.dp) }
             Box(Modifier.weight(1f)) {
@@ -442,7 +445,7 @@ private fun CodeBox(text: String, maxHeight: Int) {
         Txt(
             text, 12.sp, C.muted, mono = true, lineHeight = 18.sp,
             modifier = Modifier.fillMaxWidth().heightIn(max = maxHeight.dp)
-                .background(C.code, RoundedCornerShape(8.dp)).border(1.dp, C.line, RoundedCornerShape(8.dp))
+                .background(C.code, RoundedCornerShape(Radius.sm))
                 .verticalScroll(rememberScrollState()).padding(10.dp),
         )
     }
@@ -529,8 +532,8 @@ private fun WorkCard(vm: IrisViewModel, rounds: List<Round>, live: Boolean) {
     }
 
     Column(
-        Modifier.fillMaxWidth().background(C.surface.copy(alpha = 0.6f), RoundedCornerShape(14.dp))
-            .border(1.dp, if (waitingOn != null) C.warn.copy(alpha = 0.45f) else C.line, RoundedCornerShape(14.dp))
+        Modifier.fillMaxWidth().background(C.surface, RoundedCornerShape(Radius.md))
+            .border(1.dp, if (waitingOn != null) C.warn.copy(alpha = 0.45f) else Color.Transparent, RoundedCornerShape(Radius.md))
             .animateContentSize(),
     ) {
         Row(
@@ -542,13 +545,13 @@ private fun WorkCard(vm: IrisViewModel, rounds: List<Round>, live: Boolean) {
                 Row(horizontalArrangement = Arrangement.spacedBy((-8).dp)) {
                     for ((_, a) in helpers.take(3)) {
                         if (a != null) Orb(a, 24.dp, working = live && vm.isWorking(a.id), waiting = vm.isWaiting(a.id))
-                        else Box(Modifier.size(24.dp).background(C.accentSoft, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                        else Box(Modifier.size(24.dp).background(C.accentSoft, RoundedCornerShape(Radius.sm)), contentAlignment = Alignment.Center) {
                             Icon(Lucide.Users, C.accentHi, 12.dp)
                         }
                     }
                 }
             } else {
-                Box(Modifier.size(24.dp).background(C.accentSoft, RoundedCornerShape(7.dp)), contentAlignment = Alignment.Center) {
+                Box(Modifier.size(24.dp).background(C.accentSoft, RoundedCornerShape(Radius.sm)), contentAlignment = Alignment.Center) {
                     Icon(lastStep?.let { toolIcon(it.name) } ?: Lucide.Wrench, C.accentHi, 13.dp)
                 }
             }
@@ -568,7 +571,7 @@ private fun WorkCard(vm: IrisViewModel, rounds: List<Round>, live: Boolean) {
                 for (round in rounds) {
                     if (round.reasoning.isNotEmpty()) Thinking(round.reasoning, false)
                     if (round.content.isNotEmpty()) Markdown(round.content, color = C.muted, size = 14f)
-                    for (step in round.tools) ToolCard(vm, step)
+                    for (step in round.tools) ToolCard(vm, step, flat = true)
                 }
             }
         }
@@ -616,10 +619,10 @@ fun QuestionCard(vm: IrisViewModel, agent: Agent?, step: ToolStep, answer: Strin
         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         vm.send(agent, value) { ok -> sending = false; if (ok) other = "" }
     }
-    val shape = RoundedCornerShape(22.dp)
+    val shape = RoundedCornerShape(Radius.lg)
     Column(
         Modifier.fillMaxWidth().clip(shape).background(C.surface, shape)
-            .border(1.dp, if (open) C.accent.copy(alpha = 0.45f) else C.lineStrong, shape),
+            .border(1.dp, if (open) C.accent.copy(alpha = 0.45f) else Color.Transparent, shape),
     ) {
         Row(Modifier.padding(start = 14.dp, end = 14.dp, top = 13.dp, bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Icon(Lucide.MessageQuestion, C.accentHi, 18.dp, Modifier.padding(top = 1.dp))
@@ -639,8 +642,8 @@ fun QuestionCard(vm: IrisViewModel, agent: Agent?, step: ToolStep, answer: Strin
             ) {
                 Box(
                     Modifier.size(30.dp)
-                        .background(if (chosen) C.accent else androidx.compose.ui.graphics.Color.Transparent, RoundedCornerShape(8.dp))
-                        .border(1.dp, if (chosen) C.accent else C.lineStrong, RoundedCornerShape(8.dp)),
+                        .background(if (chosen) C.accent else androidx.compose.ui.graphics.Color.Transparent, RoundedCornerShape(Radius.sm))
+                        .border(1.dp, if (chosen) C.accent else C.lineStrong, RoundedCornerShape(Radius.sm)),
                     contentAlignment = Alignment.Center,
                 ) {
                     if (chosen) Icon(Lucide.Check, C.onAccent, 14.dp)
@@ -688,16 +691,15 @@ fun QuestionCard(vm: IrisViewModel, agent: Agent?, step: ToolStep, answer: Strin
     }
 }
 
-private val ME_SHAPE = RoundedCornerShape(20.dp, 20.dp, 6.dp, 20.dp)
+private val ME_SHAPE = RoundedCornerShape(Radius.lg, Radius.lg, Radius.sm, Radius.lg)
 
-/** An agent's words: hugs short replies, takes the full width for long ones. */
+/**
+ * An agent's words, straight on the background with no bubble: the full width of the phone for
+ * reading, like other chat apps' assistant replies. Only your own messages sit in a bubble.
+ */
 @Composable
-private fun Bubble(text: String, first: Boolean) {
-    val shape = RoundedCornerShape(if (first) 6.dp else 20.dp, 20.dp, 20.dp, 20.dp)
-    Box(
-        Modifier.background(C.bubble, shape).border(1.dp, C.bubbleLine, shape)
-            .padding(horizontal = 15.dp, vertical = 10.dp),
-    ) { SelectionContainer { Markdown(text) } }
+private fun Bubble(text: String, @Suppress("UNUSED_PARAMETER") first: Boolean) {
+    Box(Modifier.fillMaxWidth().padding(horizontal = 2.dp)) { SelectionContainer { Markdown(text) } }
 }
 
 /**

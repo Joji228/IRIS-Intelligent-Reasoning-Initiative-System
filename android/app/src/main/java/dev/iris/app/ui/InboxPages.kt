@@ -69,9 +69,9 @@ fun ProblemsPage(vm: IrisViewModel, back: () -> Unit) {
 @Composable
 private fun ProblemCard(vm: IrisViewModel, p: Problem) {
     val agent = vm.agent(p.agentId)
-    val shape = RoundedCornerShape(18.dp)
+    val shape = RoundedCornerShape(Radius.md)
     Column(
-        Modifier.fillMaxWidth().background(C.dangerSoft.copy(alpha = 0.06f), shape).border(1.dp, C.danger.copy(alpha = 0.25f), shape).padding(14.dp),
+        Modifier.fillMaxWidth().background(C.danger.copy(alpha = 0.08f), shape).padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -90,7 +90,7 @@ private fun ProblemCard(vm: IrisViewModel, p: Problem) {
         if (p.detail.isNotEmpty()) {
             Txt(
                 p.detail, 12.sp, C.muted, mono = true, maxLines = 4, lineHeight = 17.sp,
-                modifier = Modifier.fillMaxWidth().background(C.code, RoundedCornerShape(10.dp)).padding(horizontal = 10.dp, vertical = 7.dp),
+                modifier = Modifier.fillMaxWidth().background(C.code, RoundedCornerShape(Radius.sm)).padding(horizontal = 10.dp, vertical = 7.dp),
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -134,7 +134,7 @@ fun NotificationsPage(vm: IrisViewModel, back: () -> Unit) {
         item {
             Card(accent = true) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(42.dp).background(C.accentSoft, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+                    Box(Modifier.size(42.dp).background(C.accentSoft, RoundedCornerShape(Radius.md)), contentAlignment = Alignment.Center) {
                         Icon(Lucide.Bell, C.accentHi, 21.dp)
                     }
                     Column(Modifier.weight(1f)) {

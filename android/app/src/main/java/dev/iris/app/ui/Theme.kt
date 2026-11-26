@@ -15,6 +15,8 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.selection.LocalTextSelectionColors
 
 /** The desktop app's dark theme (app/src/app.css), one to one. */
@@ -51,6 +53,57 @@ object C {
     val rainbowBrush get() = Brush.linearGradient(rainbow)
 }
 
+/**
+ * The one type scale. Every size in the app snaps to one of these six steps, so screens line up
+ * instead of each picking its own (there were 16 sizes before).
+ */
+object T {
+    val caption = 11.5.sp   // times, badges, small labels
+    val small = 13.sp       // hints, secondary lines
+    val body = 14.5.sp      // messages, rows
+    val title = 16.sp       // names, card titles, the message box
+    val heading = 20.sp     // page titles, empty-chat title
+    val display = 26.sp     // the home greeting
+
+    /** The nearest step for a size written in the code. */
+    fun snap(size: TextUnit): TextUnit {
+        if (!size.isSp) return size
+        val v = size.value
+        return when {
+            v < 12f -> caption
+            v < 13.5f -> small
+            v < 15.5f -> body
+            v < 18f -> title
+            v < 23f -> heading
+            v < 28f -> display
+            else -> size // a deliberate hero size (a pairing code, a call timer)
+        }
+    }
+}
+
+/** The three corner sizes (plus fully round, RoundedCornerShape(50)). */
+object Radius {
+    val sm = 10.dp   // chips inside things, code, small tiles
+    val md = 16.dp   // buttons, fields, tool rows, bubbles
+    val lg = 22.dp   // cards, sheets, banners, the message box
+}
+
+/** The four icon sizes. */
+object IconSize {
+    val xs = 12.dp
+    val sm = 16.dp
+    val md = 20.dp
+    val lg = 24.dp
+
+    fun snap(size: Dp): Dp = when {
+        size.value <= 12.5f -> xs
+        size.value <= 17.5f -> sm
+        size.value <= 21.5f -> md
+        size.value <= 27f -> lg
+        else -> size // an illustration (an empty state)
+    }
+}
+
 fun style(
     size: TextUnit = 14.sp,
     color: Color = C.text,
@@ -59,7 +112,7 @@ fun style(
     mono: Boolean = false,
 ) = TextStyle(
     color = color,
-    fontSize = size,
+    fontSize = T.snap(size),
     fontWeight = weight,
     lineHeight = lineHeight,
     fontFamily = if (mono) FontFamily.Monospace else FontFamily.Default,

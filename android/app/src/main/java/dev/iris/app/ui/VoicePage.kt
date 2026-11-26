@@ -75,7 +75,7 @@ private const val MIXED_SAMPLE =
  */
 @Composable
 private fun TestButton(idle: String, active: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(Radius.md)
     val bg by animateColorAsState(if (active) C.accent else Color.Transparent, label = "test-bg")
     Row(
         Modifier.fillMaxWidth().heightIn(min = 48.dp)
@@ -352,7 +352,7 @@ fun VoicePage(vm: IrisViewModel, back: () -> Unit) {
                 val bg by animateColorAsState(if (held) C.danger else if (ready) C.accent else C.lineStrong, label = "mic")
                 Box(
                     Modifier.fillMaxWidth().heightIn(min = 64.dp)
-                        .background(bg, RoundedCornerShape(20.dp))
+                        .background(bg, RoundedCornerShape(Radius.lg))
                         .pointerInput(ready, sending) {
                             if (!ready || sending) return@pointerInput
                             detectTapGestures(onPress = {
@@ -378,8 +378,8 @@ fun VoicePage(vm: IrisViewModel, back: () -> Unit) {
                 }
                 heard?.let {
                     Column(
-                        Modifier.fillMaxWidth().background(C.bg.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
-                            .border(1.dp, C.lineStrong, RoundedCornerShape(14.dp)).padding(14.dp),
+                        Modifier.fillMaxWidth().background(C.bg.copy(alpha = 0.4f), RoundedCornerShape(Radius.md))
+                            .border(1.dp, C.lineStrong, RoundedCornerShape(Radius.md)).padding(14.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         Txt("I heard", 12.sp, C.faint)

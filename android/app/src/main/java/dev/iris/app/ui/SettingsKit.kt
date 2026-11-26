@@ -87,11 +87,12 @@ fun Page(
 /** A rounded group of settings, optionally highlighted (the desktop's accent box). */
 @Composable
 fun Card(modifier: Modifier = Modifier, accent: Boolean = false, padding: Boolean = true, content: @Composable ColumnScope.() -> Unit) {
-    val shape = RoundedCornerShape(22.dp)
+    val shape = RoundedCornerShape(Radius.lg)
     Column(
         modifier.fillMaxWidth()
-            .background(if (accent) C.accentSoft.copy(alpha = 0.08f) else C.surface, shape)
-            .border(1.dp, if (accent) C.accent.copy(alpha = 0.3f) else C.line, shape)
+            .background(C.surface, shape)
+            // Only a highlighted card gets an outline; plain ones are just a fill.
+            .then(if (accent) Modifier.border(1.dp, C.accent.copy(alpha = 0.35f), shape) else Modifier)
             .clip(shape)
             .then(if (padding) Modifier.padding(18.dp) else Modifier),
         verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -118,7 +119,7 @@ fun NavRow(icon: ImageVector, title: String, value: String? = null, onClick: () 
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(38.dp).background(C.accentSoft, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(38.dp).background(C.accentSoft, RoundedCornerShape(Radius.sm)), contentAlignment = Alignment.Center) {
             Icon(icon, C.accentHi, 19.dp)
         }
         Column(Modifier.weight(1f)) {
@@ -174,7 +175,7 @@ fun ChoiceCards(options: List<Triple<String, String, String>>, selected: String,
             val border by animateColorAsState(if (on) C.accent.copy(alpha = 0.7f) else C.lineStrong, label = "b")
             val bg by animateColorAsState(if (on) C.accentSoft else Color.Transparent, label = "bg")
             Row(
-                Modifier.fillMaxWidth().background(bg, RoundedCornerShape(18.dp)).border(1.dp, border, RoundedCornerShape(18.dp))
+                Modifier.fillMaxWidth().background(bg, RoundedCornerShape(Radius.md)).border(1.dp, border, RoundedCornerShape(Radius.md))
                     .press { onSelect(id) }.padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -225,8 +226,8 @@ fun SelectField(label: String?, value: String, onClick: () -> Unit, mono: Boolea
     Column {
         if (label != null) Label(label)
         Row(
-            Modifier.fillMaxWidth().background(C.bg.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
-                .border(1.dp, C.lineStrong, RoundedCornerShape(16.dp)).press(onClick = onClick)
+            Modifier.fillMaxWidth().background(C.bg.copy(alpha = 0.4f), RoundedCornerShape(Radius.md))
+                .border(1.dp, C.lineStrong, RoundedCornerShape(Radius.md)).press(onClick = onClick)
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -254,8 +255,8 @@ fun TextArea(
         cursorBrush = SolidColor(C.accentHi),
         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
         modifier = Modifier.fillMaxWidth().heightIn(min = minHeight.dp, max = maxHeight.dp)
-            .background(C.bg.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
-            .border(1.dp, C.lineStrong, RoundedCornerShape(12.dp))
+            .background(C.bg.copy(alpha = 0.4f), RoundedCornerShape(Radius.sm))
+            .border(1.dp, C.lineStrong, RoundedCornerShape(Radius.sm))
             .padding(horizontal = 14.dp, vertical = 12.dp),
         decorationBox = { inner ->
             Box {
@@ -310,7 +311,7 @@ fun GroupTitle(text: String) =
 @Composable
 fun Segmented(options: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit) {
     Row(
-        Modifier.border(1.dp, C.lineStrong, RoundedCornerShape(12.dp)).padding(3.dp),
+        Modifier.border(1.dp, C.lineStrong, RoundedCornerShape(Radius.sm)).padding(3.dp),
         horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         for ((id, label) in options) {
@@ -319,7 +320,7 @@ fun Segmented(options: List<Pair<String, String>>, selected: String, onSelect: (
             val fg by animateColorAsState(if (on) C.accentHi else C.muted, Motion.quick(), label = "segText")
             Txt(
                 label, 12.5.sp, fg, if (on) FontWeight.SemiBold else FontWeight.Normal,
-                Modifier.clip(RoundedCornerShape(9.dp)).background(bg)
+                Modifier.clip(RoundedCornerShape(Radius.sm)).background(bg)
                     .press(role = Role.RadioButton) { onSelect(id) }
                     .padding(horizontal = 8.dp, vertical = 6.dp),
             )

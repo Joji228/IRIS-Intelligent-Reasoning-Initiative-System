@@ -57,17 +57,13 @@ import dev.iris.app.link.LinkState
 fun Modifier.press(enabled: Boolean = true, role: Role = Role.Button, onClick: () -> Unit): Modifier = composed {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
-    // Sinks quickly on press and springs back with a small overshoot on release.
+    // A plain dim while held, eased back on release: no shrinking, no bounce.
     val k by animateFloatAsState(
         if (pressed) 1f else 0f,
-        if (pressed) tween(80, easing = Motion.ease) else spring(dampingRatio = 0.45f, stiffness = 600f),
+        if (pressed) tween(70) else tween(180, easing = Motion.ease),
         label = "press",
     )
-    graphicsLayer {
-        alpha = 1f - 0.2f * k.coerceIn(0f, 1f)
-        scaleX = 1f - 0.04f * k
-        scaleY = 1f - 0.04f * k
-    }
+    graphicsLayer { alpha = 1f - 0.3f * k }
         .clickable(interactionSource = source, indication = null, enabled = enabled, role = role, onClick = onClick)
 }
 
@@ -104,7 +100,7 @@ fun Shimmer(text: String, size: TextUnit = 13.sp, weight: FontWeight = FontWeigh
         maxLines = 1,
         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
         style = TextStyle(
-            fontSize = size,
+            fontSize = T.snap(size),
             fontWeight = weight,
             brush = Brush.linearGradient(
                 0f to C.faint, 0.1f to C.text, 0.2f to C.faint, 1f to C.faint,
@@ -134,7 +130,7 @@ fun Button(
     busy: Boolean = false,
     padding: PaddingValues = PaddingValues(horizontal = 18.dp, vertical = 12.dp),
 ) {
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(Radius.md)
     Row(
         modifier
             .heightIn(min = 46.dp)
@@ -155,7 +151,7 @@ fun Button(
 /** A square outlined button with a red icon, for deleting (same height as [Button]). */
 @Composable
 fun DangerIconButton(icon: ImageVector, label: String, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(Radius.md)
     Box(
         Modifier.size(46.dp).border(1.dp, C.danger.copy(alpha = 0.35f), shape).clip(shape)
             .semantics { contentDescription = label }
@@ -182,7 +178,7 @@ fun Field(
     mono: Boolean = false,
     keyboard: KeyboardOptions = KeyboardOptions.Default,
     singleLine: Boolean = true,
-    shape: Shape = RoundedCornerShape(16.dp),
+    shape: Shape = RoundedCornerShape(Radius.md),
 ) {
     BasicTextField(
         value = value,
@@ -194,7 +190,7 @@ fun Field(
         visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
         modifier = modifier
             .fillMaxWidth()
-            .background(C.surface, shape)
+            .background(C.bg.copy(alpha = 0.4f), shape)
             .border(1.dp, C.lineStrong, shape)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         decorationBox = { inner ->

@@ -79,7 +79,7 @@ fun UsageChart(data: UsageDaily, mode: String) {
             for ((label, list) in listOf("Today" to days.takeLast(1), "7 days" to days.takeLast(7), "${days.size} days" to days)) {
                 val (t, c, est) = sum(list)
                 Column(
-                    Modifier.weight(1f).background(C.surface, RoundedCornerShape(14.dp)).border(1.dp, C.line, RoundedCornerShape(14.dp))
+                    Modifier.weight(1f).background(C.surface, RoundedCornerShape(Radius.md)).border(1.dp, C.line, RoundedCornerShape(Radius.md))
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                 ) {
                     Txt(label, 11.5.sp, C.faint)

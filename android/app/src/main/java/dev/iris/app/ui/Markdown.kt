@@ -273,7 +273,7 @@ private fun Double.em() = androidx.compose.ui.unit.TextUnit(this.toFloat(), andr
 @Composable
 fun Markdown(text: String, modifier: Modifier = Modifier, color: Color = C.text, size: Float = 15f) {
     val blocks = remember(text) { parse(text) }
-    val body = style(size.sp, color, lineHeight = (size * 1.6f).sp)
+    val body = style(size.sp, color, lineHeight = (size * 1.5f).sp)
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         for (b in blocks) {
             when (b) {
@@ -283,7 +283,7 @@ fun Markdown(text: String, modifier: Modifier = Modifier, color: Color = C.text,
                     body.copy(
                         fontSize = when (b.level) { 1 -> (size + 5).sp; 2 -> (size + 3).sp; 3 -> (size + 1).sp; else -> size.sp },
                         fontWeight = FontWeight.SemiBold,
-                        lineHeight = (size * 1.6f + 4).sp,
+                        lineHeight = (size * 1.5f + 4).sp,
                     ),
                     modifier = Modifier.padding(top = 4.dp),
                 )
@@ -299,8 +299,8 @@ fun Markdown(text: String, modifier: Modifier = Modifier, color: Color = C.text,
                 }
                 is Block.Code -> Box(
                     Modifier.fillMaxWidth()
-                        .background(C.code, RoundedCornerShape(12.dp))
-                        .border(1.dp, C.line, RoundedCornerShape(12.dp)),
+                        .background(C.code, RoundedCornerShape(Radius.sm))
+                        .border(1.dp, C.line, RoundedCornerShape(Radius.sm)),
                 ) {
                     Column {
                         CodeHeader(b.lang, b.text)
@@ -318,7 +318,7 @@ fun Markdown(text: String, modifier: Modifier = Modifier, color: Color = C.text,
                 }
                 is Block.Table -> Box(Modifier.horizontalScroll(rememberScrollState())) {
                     Column(
-                        Modifier.width(IntrinsicSize.Max).clip(RoundedCornerShape(10.dp)).border(1.dp, C.lineStrong, RoundedCornerShape(10.dp)),
+                        Modifier.width(IntrinsicSize.Max).clip(RoundedCornerShape(Radius.sm)).border(1.dp, C.lineStrong, RoundedCornerShape(Radius.sm)),
                     ) {
                         val cols = b.rows.maxOf { it.size }
                         val cellStyle = { r: Int -> style(13.5.sp, C.text, if (r == 0) FontWeight.SemiBold else FontWeight.Normal, 20.sp) }

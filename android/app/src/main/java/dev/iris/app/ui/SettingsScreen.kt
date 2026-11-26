@@ -448,7 +448,7 @@ private fun AboutPage(vm: IrisViewModel, back: () -> Unit) {
                     CardTitle("Version ${release.version} is out", "You have ${BuildConfig.VERSION_NAME}. The update is downloaded from GitHub, checked against its checksum, and then Android asks you to confirm the install. Your chats and pairing stay.")
                     if (release.notes.isNotBlank()) {
                         // What's new, rendered (the notes' own "What's new" heading is dropped).
-                        Box(Modifier.fillMaxWidth().background(C.accentSoft.copy(alpha = 0.35f), RoundedCornerShape(14.dp)).padding(12.dp)) {
+                        Box(Modifier.fillMaxWidth().background(C.accentSoft.copy(alpha = 0.35f), RoundedCornerShape(Radius.md)).padding(12.dp)) {
                             Markdown(release.notes.replace(Regex("^\\s*#{1,3}\\s*What's new\\s*\\n", RegexOption.IGNORE_CASE), ""), color = C.muted, size = 13.5f)
                         }
                     }

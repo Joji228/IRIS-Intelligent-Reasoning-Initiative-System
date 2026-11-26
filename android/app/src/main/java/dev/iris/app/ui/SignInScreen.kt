@@ -127,7 +127,7 @@ fun SignInScreen(vm: IrisViewModel) {
             Modifier.widthIn(max = 420.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 36.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Image(painterResource(R.drawable.iris_logo), null, Modifier.size(64.dp).clip(RoundedCornerShape(16.dp)))
+            Image(painterResource(R.drawable.iris_logo), null, Modifier.size(64.dp).clip(RoundedCornerShape(Radius.md)))
             Spacer(Modifier.height(18.dp))
             Txt("I.R.I.S.", 24.sp, C.text, FontWeight.SemiBold)
             Txt("Pair this phone to reach your agents from anywhere", 13.sp, C.faint, modifier = Modifier.padding(top = 4.dp))
@@ -143,14 +143,14 @@ fun SignInScreen(vm: IrisViewModel) {
 
             Spacer(Modifier.height(26.dp))
             Column(
-                Modifier.fillMaxWidth().background(C.surface, RoundedCornerShape(18.dp)).border(1.dp, C.line, RoundedCornerShape(18.dp)).padding(16.dp),
+                Modifier.fillMaxWidth().background(C.surface, RoundedCornerShape(Radius.lg)).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Row(Modifier.fillMaxWidth().background(C.elevated, RoundedCornerShape(12.dp)).padding(4.dp)) {
+                Row(Modifier.fillMaxWidth().background(C.elevated, RoundedCornerShape(Radius.sm)).padding(4.dp)) {
                     for ((m, label, icon) in listOf(Triple(Mode.Code, "Pairing code", Lucide.QrCode), Triple(Mode.Password, "Password", Lucide.KeyRound))) {
                         val on = mode == m
                         Row(
-                            Modifier.weight(1f).background(if (on) C.surface else C.elevated, RoundedCornerShape(9.dp))
+                            Modifier.weight(1f).background(if (on) C.surface else C.elevated, RoundedCornerShape(Radius.sm))
                                 .press { mode = m }.padding(vertical = 9.dp),
                             horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
                             verticalAlignment = Alignment.CenterVertically,

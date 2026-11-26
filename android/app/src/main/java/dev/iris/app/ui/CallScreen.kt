@@ -458,8 +458,8 @@ private fun CallApproval(vm: IrisViewModel, a: PendingApproval) =
 internal fun CallApprovalCard(summary: String, onApprove: () -> Unit, onDeny: () -> Unit) {
     Column(
         Modifier.fillMaxWidth()
-            .background(C.surface.copy(alpha = 0.85f), RoundedCornerShape(24.dp))
-            .border(1.dp, C.warn.copy(alpha = 0.45f), RoundedCornerShape(24.dp))
+            .background(C.surface.copy(alpha = 0.85f), RoundedCornerShape(Radius.lg))
+            .border(1.dp, C.warn.copy(alpha = 0.45f), RoundedCornerShape(Radius.lg))
             .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -583,7 +583,6 @@ fun CallButton(vm: IrisViewModel, agent: Agent) {
     Box(
         Modifier.size(38.dp)
             .background(if (onThisCall) C.success.copy(alpha = 0.16f) else C.accentSoft, CircleShape)
-            .border(1.dp, if (onThisCall) C.success.copy(alpha = 0.5f) else C.accent.copy(alpha = 0.35f), CircleShape)
             .press {
                 when {
                     onThisCall -> vm.open(Screen.Call(agent.id))

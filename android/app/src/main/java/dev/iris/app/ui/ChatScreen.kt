@@ -10,6 +10,11 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
@@ -118,8 +123,8 @@ fun ChatScreen(vm: IrisViewModel, agent: Agent) {
         ) {
             Column(
                 Modifier.padding(horizontal = 10.dp).padding(bottom = 6.dp).fillMaxWidth()
-                    .background(C.surface.copy(alpha = 0.92f), RoundedCornerShape(18.dp))
-                    .border(1.dp, C.line, RoundedCornerShape(18.dp)).heightIn(max = 170.dp)
+                    .background(C.surface.copy(alpha = 0.92f), RoundedCornerShape(Radius.md))
+                    .heightIn(max = 170.dp)
                     .verticalScroll(rememberScrollState()).padding(6.dp),
             ) {
                 Row(Modifier.padding(horizontal = 6.dp, vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -131,7 +136,7 @@ fun ChatScreen(vm: IrisViewModel, agent: Agent) {
                         Txt("${i + 1}", 11.sp, C.faint)
                         Txt(q.content.ifEmpty { "Files" }, 13.5.sp, C.text, maxLines = 1, modifier = Modifier.weight(1f))
                         Row(
-                            Modifier.background(C.accentSoft, RoundedCornerShape(50)).border(1.dp, C.accent.copy(alpha = 0.5f), RoundedCornerShape(50))
+                            Modifier.background(C.accentSoft, RoundedCornerShape(50))
                                 .press { threadId?.let { vm.steerQueued(it, q.id) } }.padding(horizontal = 14.dp, vertical = 8.dp),
                             horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -148,7 +153,7 @@ fun ChatScreen(vm: IrisViewModel, agent: Agent) {
         AnimatedVisibility(threadId != null && vm.compacting[threadId] == true, enter = fadeIn(), exit = fadeOut()) {
             Box(Modifier.fillMaxWidth().padding(top = 6.dp), contentAlignment = Alignment.Center) {
                 Row(
-                    Modifier.background(C.accentSoft, RoundedCornerShape(50)).border(1.dp, C.accent.copy(alpha = 0.3f), RoundedCornerShape(50))
+                    Modifier.background(C.accentSoft, RoundedCornerShape(50))
                         .padding(horizontal = 14.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -168,58 +173,51 @@ private fun Header(vm: IrisViewModel, agent: Agent) {
     val waiting = vm.isWaiting(agent.id)
     // The default effort, so the button shows the level the agent really uses ("High"), not "Auto".
     LaunchedEffect(Unit) { if (vm.defaultModel == null || vm.reasoningDefault.isEmpty()) vm.loadModelSettings() }
-    // Compact buttons, so the agent's name has room on a phone.
+    // Just back, who you're talking to, call and ⋯: the model, thinking effort and command
+    // approvals live in the ⋯ menu, so the name has room on a phone.
     Row(
-        Modifier.fillMaxWidth().height(66.dp).padding(start = 0.dp, end = 0.dp),
+        Modifier.fillMaxWidth().height(64.dp).padding(end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(Lucide.ChevronLeft, { vm.back() }, C.muted, 26.dp, Modifier.size(36.dp))
-        AgentOrb(vm, agent, 30.dp)
-        Column(Modifier.weight(1f).padding(start = 8.dp, end = 6.dp)) {
-            Txt(agent.name, 15.5.sp, C.text, FontWeight.SemiBold, maxLines = 1)
+        IconButton(Lucide.ChevronLeft, { vm.back() }, C.muted, 24.dp)
+        AgentOrb(vm, agent, 32.dp)
+        Column(Modifier.weight(1f).padding(start = 10.dp, end = 8.dp)) {
+            Txt(agent.name, 16.sp, C.text, FontWeight.SemiBold, maxLines = 1)
             AnimatedContent(
                 when { waiting -> 1; working -> 2; else -> 0 },
-                transitionSpec = { (fadeIn(tween(200)) + slideInVertically { it / 2 }) togetherWith fadeOut(tween(120)) },
+                transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(120)) },
                 label = "status",
             ) { s ->
                 when (s) {
-                    1 -> Txt("Waiting for your approval", 12.sp, C.warn, FontWeight.Medium, maxLines = 1)
+                    1 -> Txt("Waiting for your approval", 13.sp, C.warn, FontWeight.Medium, maxLines = 1)
                     // The exact step when there is one ("Searching the web for “…”"), else the plain phrase.
-                    2 -> Shimmer(vm.detailOf(agent.id).ifEmpty { vm.statusLine(agent.id) }, 12.sp, FontWeight.Normal)
-                    else -> Txt(agent.description.ifEmpty { "Ready" }, 12.sp, C.faint, maxLines = 1)
+                    2 -> Shimmer(vm.detailOf(agent.id).ifEmpty { vm.statusLine(agent.id) }, 13.sp, FontWeight.Normal)
+                    else -> Txt(agent.description.ifEmpty { "Ready" }, 13.sp, C.faint, maxLines = 1)
                 }
             }
         }
-        // Model, thinking effort and auto mode, like the desktop's chat header.
-        Row(
-            Modifier.background(C.surface.copy(alpha = 0.6f), RoundedCornerShape(50)).border(1.dp, C.line, RoundedCornerShape(50)).padding(2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(
-                Modifier.height(38.dp).clip(RoundedCornerShape(50)).press { modelSheet(vm, overlays, agent) }.padding(horizontal = 6.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp),
-            ) {
-                Icon(Lucide.Brain, C.muted, 14.dp)
-                Txt(reasoningLabel(agent.reasoningEffort.ifEmpty { vm.reasoningDefault }), 12.sp, C.muted, FontWeight.Medium)
-            }
-            val auto = autoMode(agent)
-            Box(
-                Modifier.size(34.dp)
-                    .background(if (auto == "full") C.accent.copy(alpha = 0.22f) else androidx.compose.ui.graphics.Color.Transparent, CircleShape)
-                    .press { autoSheet(vm, overlays, agent) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    when (auto) { "full" -> Lucide.Zap; "careful" -> Lucide.ShieldCheck; else -> Lucide.ShieldOff },
-                    if (auto == "off") C.faint else C.accentHi, 17.dp,
-                )
-            }
-        }
-        // A clear gap between the pill and the call button.
-        Spacer(Modifier.width(8.dp))
         CallButton(vm, agent)
-        IconButton(Lucide.Ellipsis, { agentMenu(vm, overlays, agent, inChat = true) }, C.muted, modifier = Modifier.size(36.dp))
+        IconButton(Lucide.Ellipsis, { chatMenu(vm, overlays, agent) }, C.muted, 22.dp)
     }
+}
+
+/** The chat's ⋯ menu: this agent's model and approvals first, then the usual agent actions. */
+private fun chatMenu(vm: IrisViewModel, overlays: Overlays, agent: Agent) {
+    val auto = autoMode(agent)
+    agentMenu(
+        vm, overlays, agent, inChat = true,
+        extra = listOf(
+            MenuItem(
+                "Model & thinking", Lucide.Brain,
+                value = reasoningLabel(agent.reasoningEffort.ifEmpty { vm.reasoningDefault }),
+            ) { modelSheet(vm, overlays, agent) },
+            MenuItem(
+                "Command approvals",
+                when (auto) { "full" -> Lucide.Zap; "careful" -> Lucide.ShieldCheck; else -> Lucide.ShieldOff },
+                value = AUTO_MODES.firstOrNull { it.first == auto }?.second,
+            ) { autoSheet(vm, overlays, agent) },
+        ),
+    )
 }
 
 private fun autoMode(a: Agent) = if (!a.autoApprove) "off" else if (a.autoFull) "full" else "careful"
@@ -332,7 +330,7 @@ private fun BoxScope.Messages(vm: IrisViewModel, agent: Agent, fill: (String) ->
                 enter = fadeIn() + scaleIn(initialScale = 0.8f), exit = fadeOut() + scaleOut(targetScale = 0.8f),
             ) {
                 Row(
-                    Modifier.background(C.elevated, RoundedCornerShape(50)).border(1.dp, C.lineStrong, RoundedCornerShape(50))
+                    Modifier.background(C.elevated, RoundedCornerShape(50))
                         .press { scope.launch { list.animateScrollToItem(0) } }.padding(horizontal = 16.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -365,7 +363,7 @@ private fun DayDivider(ms: Long) {
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
         Txt(
             dayLabel(ms), 11.5.sp, C.muted, FontWeight.Medium,
-            Modifier.background(C.panel, RoundedCornerShape(50)).border(1.dp, C.line, RoundedCornerShape(50))
+            Modifier.background(C.surface, RoundedCornerShape(50))
                 .padding(horizontal = 12.dp, vertical = 3.dp),
         )
     }
@@ -408,8 +406,8 @@ private fun BoxScope.EmptyChat(vm: IrisViewModel, agent: Agent, fill: (String) -
             Txt(
                 s, 14.sp, C.muted, lineHeight = 20.sp,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)
-                    .background(C.bubble, RoundedCornerShape(16.dp))
-                    .border(1.dp, C.bubbleLine, RoundedCornerShape(16.dp)).press { fill(s) }.padding(horizontal = 16.dp, vertical = 12.dp),
+                    .background(C.bubble, RoundedCornerShape(Radius.md))
+                    .press { fill(s) }.padding(horizontal = 16.dp, vertical = 12.dp),
             )
         }
     }
@@ -424,7 +422,7 @@ private fun CompactedDivider(summary: String, before: Int) {
             Box(Modifier.weight(1f).height(1.dp).background(C.accent.copy(alpha = 0.35f)))
             Row(
                 Modifier.clip(RoundedCornerShape(50)).press { open = !open }.background(C.accentSoft)
-                    .border(1.dp, C.accent.copy(alpha = 0.35f), RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 7.dp),
+                    .padding(horizontal = 12.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Icon(Lucide.Archive, C.accentHi, 13.dp)
@@ -433,7 +431,7 @@ private fun CompactedDivider(summary: String, before: Int) {
             Box(Modifier.weight(1f).height(1.dp).background(C.accent.copy(alpha = 0.35f)))
         }
         AnimatedVisibility(open) {
-            Box(Modifier.fillMaxWidth().background(C.surface, RoundedCornerShape(14.dp)).padding(14.dp)) {
+            Box(Modifier.fillMaxWidth().background(C.surface, RoundedCornerShape(Radius.md)).padding(14.dp)) {
                 Markdown(summary, color = C.muted, size = 13.5f)
             }
         }
@@ -461,8 +459,8 @@ private fun Composer(
     var sending by remember { mutableStateOf(false) }
     val haptics = LocalHapticFeedback.current
     val canSend = (text.isNotBlank() || files.isNotEmpty()) && enabled && !sending && reading == 0
-    val shape = RoundedCornerShape(28.dp)
-    val edge by animateColorAsState(if (focused) C.accent.copy(alpha = 0.45f) else C.lineStrong, tween(200), label = "edge")
+    // No outline: the box just lifts a shade while you type.
+    val fill by animateColorAsState(if (focused) C.elevated else C.surface, tween(200), label = "fill")
 
     fun add(uris: List<Uri>) {
         val room = Uploads.MAX_FILES - files.size
@@ -532,19 +530,87 @@ private fun Composer(
         }
     }
 
+    // One line: [+] [research] text [send] in a single pill. Once the text needs a second
+    // line, it takes the full width and the buttons move to a row under it (like other chat
+    // apps), instead of sitting at the bottom left with an empty block above them. Whether it
+    // fits is measured at the one-line width, so the layout never flips back and forth.
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    var rowWidth by remember { mutableIntStateOf(0) }
+    var researchWidth by remember { mutableIntStateOf(0) }
+    val multi = remember(text, rowWidth, researchWidth, density) {
+        text.contains('\n') || (rowWidth > 0 && text.isNotEmpty() && run {
+            val fixed = with(density) { (COMPOSER_BTN * 2 + FIELD_PAD * 2).roundToPx() } + researchWidth
+            measurer.measure(text, COMPOSER_TEXT, constraints = Constraints(maxWidth = (rowWidth - fixed).coerceAtLeast(1))).lineCount > 1
+        })
+    }
+
+    @Composable
+    fun PlusButton() {
+        Box(
+            Modifier.size(COMPOSER_BTN).clip(CircleShape).background(Color.White.copy(alpha = 0.06f), CircleShape).press(onClick = ::attach),
+            contentAlignment = Alignment.Center,
+        ) { Icon(Lucide.Plus, C.muted, 20.dp) }
+    }
+
+    @Composable
+    fun ResearchButton() {
+        // Deep research: an icon, which grows a label while it's on.
+        Row(
+            Modifier.padding(start = 4.dp).height(COMPOSER_BTN).widthIn(min = COMPOSER_BTN).clip(CircleShape)
+                .background(if (research) C.accentSoft else Color.Transparent, CircleShape)
+                .press { research = !research; haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
+                .onSizeChanged { researchWidth = it.width }
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Icon(Lucide.Telescope, if (research) C.accentHi else C.muted, 20.dp)
+            AnimatedVisibility(research, enter = expandHorizontally() + fadeIn(), exit = shrinkHorizontally() + fadeOut()) {
+                Txt("Research", 13.sp, C.accentHi, FontWeight.Medium, Modifier.padding(start = 6.dp))
+            }
+        }
+    }
+
+    @Composable
+    fun SendButton() {
+        val stop = running && text.isBlank() && files.isEmpty() && !sending
+        val bg by animateColorAsState(
+            if (stop) C.text else if (canSend || sending) C.accent else Color.White.copy(alpha = 0.06f), tween(180), label = "send",
+        )
+        Box(
+            Modifier.size(COMPOSER_BTN).clip(CircleShape).background(bg, CircleShape)
+                .press(stop || canSend) { if (stop) vm.stop() else submit() },
+            contentAlignment = Alignment.Center,
+        ) {
+            AnimatedContent(
+                if (sending) 2 else if (stop) 1 else 0,
+                transitionSpec = { fadeIn(tween(150)) togetherWith fadeOut(tween(100)) },
+                label = "sendIcon",
+            ) { st ->
+                when (st) {
+                    2 -> Spinner(18.dp, C.onAccent)
+                    1 -> Icon(Lucide.Square, C.bg, 14.dp)
+                    else -> Icon(Lucide.ArrowUp, if (canSend) C.onAccent else C.faint, 20.dp)
+                }
+            }
+        }
+    }
+
     Column(
         Modifier.padding(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 10.dp).fillMaxWidth()
-            .background(C.surface, shape).border(1.dp, edge, shape).padding(5.dp)
+            // A true pill on one line (half of the 56 dp height), soft corners once it grows.
+            .background(fill, RoundedCornerShape(28.dp)).padding(6.dp)
             .animateContentSize(Motion.standard()),
     ) {
         // Slash commands: "/" shows what can be typed; a tap runs it.
         val typedCommand = text.trim().lowercase()
         if (typedCommand.startsWith("/") && "/compact".startsWith(typedCommand) && files.isEmpty()) {
             Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).press {
+                Modifier.fillMaxWidth().padding(bottom = 4.dp).clip(RoundedCornerShape(Radius.lg)).press {
                     onText("")
                     vm.compactChat(agent.id)
-                }.background(C.elevated).padding(horizontal = 12.dp, vertical = 10.dp),
+                }.background(C.hover).padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Icon(Lucide.Archive, C.accentHi, 15.dp)
@@ -554,43 +620,37 @@ private fun Composer(
         }
         if (files.isNotEmpty() || reading > 0) {
             Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 6.dp, end = 6.dp, top = 6.dp, bottom = 4.dp),
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 4.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 files.forEachIndexed { i, f -> AttachmentChip(f) { files.removeAt(i) } }
                 if (reading > 0) {
-                    Box(Modifier.size(64.dp).background(C.elevated, RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) { Spinner(18.dp) }
+                    Box(Modifier.size(64.dp).background(C.hover, RoundedCornerShape(Radius.md)), contentAlignment = Alignment.Center) { Spinner(18.dp) }
                 }
             }
         }
-        Row(verticalAlignment = Alignment.Bottom) {
-            IconButton(Lucide.Plus, ::attach, C.muted, 22.dp, Modifier.size(46.dp))
-            // Deep research: an icon, which grows a label while it's on.
-            Row(
-                Modifier.height(46.dp).widthIn(min = 42.dp).clip(RoundedCornerShape(50))
-                    .background(if (research) C.accentSoft else androidx.compose.ui.graphics.Color.Transparent, RoundedCornerShape(50))
-                    .press { research = !research; haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
-                    .padding(horizontal = 11.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Lucide.Telescope, if (research) C.accentHi else C.muted, 20.dp)
-                AnimatedVisibility(research, enter = expandHorizontally() + fadeIn(), exit = shrinkHorizontally() + fadeOut()) {
-                    Txt("Research", 12.5.sp, C.accentHi, FontWeight.Medium, Modifier.padding(start = 6.dp))
-                }
+        Row(Modifier.fillMaxWidth().onSizeChanged { rowWidth = it.width }, verticalAlignment = Alignment.CenterVertically) {
+            if (!multi) {
+                PlusButton()
+                ResearchButton()
             }
             BasicTextField(
                 value = text,
                 onValueChange = onText,
                 enabled = enabled,
-                textStyle = style(16.sp, C.text, lineHeight = 23.sp),
+                textStyle = COMPOSER_TEXT,
                 cursorBrush = SolidColor(C.accentHi),
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                maxLines = 7,
-                modifier = Modifier.weight(1f).heightIn(min = 46.dp).onFocusChanged { focused = it.isFocused }
-                    // A hair lower than centred: lowercase text reads centred against the round buttons.
-                    .padding(start = 4.dp, end = 6.dp, top = 12.dp, bottom = 10.dp),
+                maxLines = 8,
+                modifier = Modifier.weight(1f).onFocusChanged { focused = it.isFocused },
                 decorationBox = { inner ->
-                    Box {
+                    // Centred on the buttons: the line box is centred on its glyphs, then 1 dp
+                    // lower, because capitals and ascenders make an exactly centred line read high.
+                    Box(
+                        Modifier.fillMaxWidth().heightIn(min = COMPOSER_BTN)
+                            .padding(start = FIELD_PAD, end = FIELD_PAD, top = 11.dp, bottom = 9.dp),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
                         if (text.isEmpty()) {
                             Txt(
                                 when {
@@ -598,32 +658,34 @@ private fun Composer(
                                     files.isNotEmpty() -> "Add a message…"
                                     else -> "Message ${agent.name}…"
                                 },
-                                16.sp, C.faint, maxLines = 1, lineHeight = 23.sp,
+                                16.sp, C.faint, maxLines = 1, lineHeight = 22.sp,
                             )
                         }
                         inner()
                     }
                 },
             )
-            val stop = running && text.isBlank() && files.isEmpty() && !sending
-            val bg by animateColorAsState(if (stop) C.text else if (canSend || sending) C.accent else C.hover, tween(180), label = "send")
-            val pop by animateFloatAsState(if (canSend || stop || sending) 1f else 0.92f, spring(dampingRatio = 0.6f, stiffness = 600f), label = "pop")
-            Box(
-                Modifier.size(46.dp).graphicsLayer { scaleX = pop; scaleY = pop }.clip(CircleShape).background(bg, CircleShape)
-                    .press(stop || canSend) { if (stop) vm.stop() else submit() },
-                contentAlignment = Alignment.Center,
-            ) {
-                AnimatedContent(if (sending) 2 else if (stop) 1 else 0, transitionSpec = { (scaleIn() + fadeIn()) togetherWith (scaleOut() + fadeOut()) }, label = "sendIcon") { s ->
-                    when (s) {
-                        2 -> Spinner(18.dp, C.onAccent)
-                        1 -> Icon(Lucide.Square, C.bg, 15.dp)
-                        else -> Icon(Lucide.ArrowUp, if (canSend) C.onAccent else C.faint, 22.dp)
-                    }
-                }
+            if (!multi) SendButton()
+        }
+        if (multi) {
+            Row(Modifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                PlusButton()
+                ResearchButton()
+                Spacer(Modifier.weight(1f))
+                SendButton()
             }
         }
     }
 }
+
+private val COMPOSER_BTN = 44.dp
+private val FIELD_PAD = 10.dp
+private val COMPOSER_TEXT = style(16.sp, C.text, lineHeight = 22.sp).copy(
+    lineHeightStyle = androidx.compose.ui.text.style.LineHeightStyle(
+        androidx.compose.ui.text.style.LineHeightStyle.Alignment.Center,
+        androidx.compose.ui.text.style.LineHeightStyle.Trim.None,
+    ),
+)
 
 /** A picked file in the message box: a thumbnail for a photo, a chip for anything else. */
 @Composable
@@ -631,11 +693,11 @@ private fun AttachmentChip(file: Upload, onRemove: () -> Unit) {
     val thumb = remember(file) { file.thumb?.asImageBitmap() }
     Box {
         if (thumb != null) {
-            Image(thumb, file.name, Modifier.size(64.dp).clip(RoundedCornerShape(16.dp)), contentScale = ContentScale.Crop)
+            Image(thumb, file.name, Modifier.size(64.dp).clip(RoundedCornerShape(Radius.md)), contentScale = ContentScale.Crop)
         } else {
             Row(
-                Modifier.height(64.dp).widthIn(max = 200.dp).background(C.elevated, RoundedCornerShape(16.dp))
-                    .border(1.dp, C.line, RoundedCornerShape(16.dp)).padding(start = 12.dp, end = 26.dp),
+                Modifier.height(64.dp).widthIn(max = 200.dp).background(C.elevated, RoundedCornerShape(Radius.md))
+                    .padding(start = 12.dp, end = 26.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {

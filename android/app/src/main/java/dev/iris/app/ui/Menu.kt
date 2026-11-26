@@ -109,7 +109,7 @@ fun OverlayHost(overlays: Overlays, content: @Composable () -> Unit) {
                                     exit = slideOutVertically(tween(220, easing = Motion.ease)) { it },
                                 )
                                 .fillMaxWidth()
-                                .background(C.elevated, RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+                                .background(C.elevated, RoundedCornerShape(topStart = Radius.lg, topEnd = Radius.lg))
                                 .clickable(remember { MutableInteractionSource() }, null) {}
                                 .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))
                                 .padding(top = 10.dp, bottom = 10.dp),
@@ -132,6 +132,8 @@ class MenuItem(
     val enabled: Boolean = true,
     /** Asks for a second tap first (the desktop's "Click again to …"). */
     val confirm: String? = null,
+    /** What it's set to now, shown on the right ("High", "Asks first"). */
+    val value: String? = null,
     val action: () -> Unit,
 )
 
@@ -162,7 +164,9 @@ fun Overlays.menu(title: String?, items: List<MenuItem>) = show { dismiss ->
             Txt(
                 if (isArmed) item.confirm!! else item.label, 16.sp,
                 if (item.danger) C.danger else C.text, if (isArmed) FontWeight.SemiBold else FontWeight.Normal,
+                modifier = Modifier.weight(1f),
             )
+            if (item.value != null && !isArmed) Txt(item.value, 14.sp, C.faint, maxLines = 1)
         }
     }
 }
@@ -201,8 +205,9 @@ fun Modifier.pressLong(onLong: () -> Unit, onClick: () -> Unit): Modifier = comp
     val haptics = LocalHapticFeedback.current
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.98f else 1f, label = "press")
-    graphicsLayer { scaleX = scale; scaleY = scale }
+    // The same plain dim as [press]: no shrinking, no bounce.
+    val dim by animateFloatAsState(if (pressed) 1f else 0f, if (pressed) tween(70) else tween(180, easing = Motion.ease), label = "press")
+    graphicsLayer { alpha = 1f - 0.3f * dim }
         .combinedClickable(
             interactionSource = source,
             indication = null,

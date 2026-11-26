@@ -284,7 +284,7 @@ fun EffortSlider(
                     // Just a colour change, no bounce.
                     val color by animateColorAsState(if (on) C.accentHi else C.faint, tween(200), label = "effort-label")
                     Box(
-                        Modifier.clip(RoundedCornerShape(6.dp))
+                        Modifier.clip(RoundedCornerShape(Radius.sm))
                             .press { pick(i) }
                             .padding(horizontal = 4.dp, vertical = 2.dp),
                     ) {
