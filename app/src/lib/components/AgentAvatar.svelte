@@ -10,6 +10,7 @@
   import { FileText, Globe, Hourglass, Search, Sparkles, SquareTerminal, Users } from '@lucide/svelte';
   import type { Agent, Mood } from '../types';
   import { FACES, HOLD, POOLS, orbState, phrases, type Face, type OrbState } from '../orbs';
+  import { isStill, onStill } from '../still';
 
   let {
     agent,
@@ -90,6 +91,8 @@
     const next = () => {
       const hold = (HOLD[s] ?? 2200) * (0.75 + Math.random() * 0.6);
       t = setTimeout(() => {
+        // Nobody looking (lib/still.ts): keep the face, check again later.
+        if (isStill()) return next();
         // Reading sweeps left-right in order; everything else picks freely.
         if (s === 'reading' || s === 'celebrate') faceIdx = (faceIdx + 1) % pool.length;
         else {
@@ -136,7 +139,7 @@
   // Long steps: the phrase changes now and then while it's open.
   $effect(() => {
     if (!speech || !(open || hovered) || lines.length < 2) return;
-    const t = setInterval(() => (phraseIdx = (phraseIdx + 1) % lines.length), 3200);
+    const t = setInterval(() => { if (!isStill()) phraseIdx = (phraseIdx + 1) % lines.length; }, 3200);
     return () => clearInterval(t);
   });
   const showBubble = $derived(speech && lines.length > 0 && (open || hovered) && orbMode !== 'sleeping');
@@ -171,17 +174,27 @@
     if (!showBubble || !root) return;
     let raf = 0;
     const place = () => {
+      raf = 0;
       const r = root!.getBoundingClientRect();
       const w = bubbleEl?.offsetWidth ?? 180;
       const left = r.right + 10 + w > window.innerWidth - 6;
       // The orb isn't on screen (its bar is hidden, as on a phone in a chat):
       // no bubble pinned to the corner.
       const hidden = r.width === 0 && r.height === 0;
-      pos = { x: left ? r.left - 10 : r.right + 8, y: r.top + r.height / 2, left, hidden };
-      raf = requestAnimationFrame(place);
+      const x = left ? r.left - 10 : r.right + 8;
+      const y = r.top + r.height / 2;
+      if (x !== pos.x || y !== pos.y || left !== pos.left || hidden !== pos.hidden) pos = { x, y, left, hidden };
+      // Follows the orb each frame, but not while nobody is looking (lib/still.ts).
+      if (!isStill()) raf = requestAnimationFrame(place);
     };
     place();
-    return () => cancelAnimationFrame(raf);
+    const off = onStill((s) => {
+      if (!s && !raf) place();
+    });
+    return () => {
+      off();
+      cancelAnimationFrame(raf);
+    };
   });
   function portal(node: HTMLElement) {
     document.body.appendChild(node);

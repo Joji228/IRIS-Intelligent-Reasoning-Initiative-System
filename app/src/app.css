@@ -587,3 +587,11 @@ button[aria-busy='true']::after {
 [data-theme='light'] .hljs-title { color: #1d4ed8; }
 [data-theme='light'] .hljs-attr, [data-theme='light'] .hljs-property { color: #be185d; }
 [data-theme='light'] .hljs-built_in { color: #0e7490; }
+
+/* Nobody is looking (window hidden, or no input for a while; see lib/still.ts):
+   pause every looping animation, so an idle window stops redrawing. */
+:root[data-still] *,
+:root[data-still] *::before,
+:root[data-still] *::after {
+  animation-play-state: paused !important;
+}
