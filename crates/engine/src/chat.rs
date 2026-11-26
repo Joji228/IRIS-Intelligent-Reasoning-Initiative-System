@@ -43,6 +43,19 @@ question you may hand sub-questions to agents in parallel.
 3. Cross-check key claims; where sources disagree, say so.
 4. Write a report: a 3–5 line summary first, then sections. Cite every factual claim inline as [1], [2]… and end with \
 a \"Sources\" list: [n] Title — URL. Say plainly what you couldn't verify.";
+/// Visual cards (Intelligent UI): replies to the user may carry a small interactive
+/// page, which the apps render in a sandboxed frame (app/public/visual.html).
+const VISUAL_RULE: &str = "\n\nVisuals: when it explains something much better than text (comparing options, numbers \
+or trends, a process in steps, a quick calculator, converter or what-if slider), you may add one small interactive \
+visual to a reply. Write it as a fenced code block whose info line is `visual` and a short title (```visual Title), \
+holding an HTML fragment (no <html>, <head> or <body>) with inline <style> and <script> if needed. It runs in a \
+sandbox with no network: no external scripts, fonts, images or requests; draw charts with inline SVG. The app styles \
+plain HTML for its dark theme and offers CSS variables (--text, --muted, --faint, --accent, --accent-hi, \
+--accent-soft, --surface, --elevated, --hover, --line, --success, --danger, --warn) and classes: .card, .row, .col, \
+.grid, .spread, .stat (with .value and .label inside), .bar>i (set its width), .chip, button.primary, .muted, .good, \
+.bad, .small, .big. Design for a phone (about 360 px wide), keep it under about 120 lines, and still give the key \
+answer in the text. Most replies need no visual; never add one just for decoration.";
+
 /// How a message spoken on a voice call starts (the phone app adds it and shows
 /// it as a small phone chip).
 pub const VOICE_PREFIX: &str = "[Voice call]";
@@ -51,7 +64,7 @@ The user is talking to you on a voice call and your reply is read aloud. Their w
 so allow for small mistakes. The user speaks only English or Greek: answer in the one they spoke, and never in any \
 other language. If their message looks like another language or like nonsense, it is a transcription mistake: say \
 in English that you didn't catch that and ask them to repeat. Keep what you say short and \
-natural, 1–3 sentences unless they ask for more, with no markdown, lists, tables, emojis or URLs in the spoken part. \
+natural, 1–3 sentences unless they ask for more, with no markdown, lists, tables, visuals, emojis or URLs in the spoken part. \
 Before a task that takes more than a few seconds, first say one short sentence (for example \"On it, give me a \
 minute.\"). If the answer needs code, a table, links or a long report, say a one-sentence summary, then put the rest \
 after a line that is exactly [details]. The app shows that part in the chat and doesn't read it aloud. Approvals \
@@ -1207,6 +1220,10 @@ fn system_prompt(state: &AppState, agent: &Agent, thread_id: &str, conn: &Conn, 
              [I.R.I.S. update]; then collect the result with check_task and report. If an agent waits for the \
              user's approval, say so in one line and end your reply.",
         );
+    }
+    // Visual cards are for the user to look at, not for agents reporting to another agent.
+    if agent.created_by.is_empty() {
+        prompt.push_str(VISUAL_RULE);
     }
     // The user's chosen style overrides the tone above; it's for talking to
     // the user, not for agents reporting to another agent.

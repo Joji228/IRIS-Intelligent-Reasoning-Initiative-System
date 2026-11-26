@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.key
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -61,7 +62,8 @@ import androidx.compose.ui.unit.sp
 private sealed interface Block {
     data class Heading(val level: Int, val text: String) : Block
     data class Para(val text: String) : Block
-    data class Code(val lang: String, val text: String) : Block
+    /** [closed]: the closing fence has arrived (a streaming reply may not have it yet). */
+    data class Code(val lang: String, val text: String, val closed: Boolean = true) : Block
     data class Item(val depth: Int, val marker: String, val text: String) : Block
     data class Quote(val text: String) : Block
     data class Table(val rows: List<List<String>>) : Block
@@ -97,7 +99,7 @@ private fun parse(md: String): List<Block> {
                     code.append(lines[i]).append('\n')
                     i++
                 }
-                out += Block.Code(lang, code.toString().trimEnd('\n'))
+                out += Block.Code(lang, code.toString().trimEnd('\n'), closed = i < lines.size)
             }
             line.isBlank() -> flush()
             heading.matches(trimmed) -> {
@@ -275,7 +277,7 @@ fun Markdown(text: String, modifier: Modifier = Modifier, color: Color = C.text,
     val blocks = remember(text) { parse(text) }
     val body = style(size.sp, color, lineHeight = (size * 1.5f).sp)
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        for (b in blocks) {
+        blocks.forEachIndexed { index, b -> key(index) {
             when (b) {
                 is Block.Para -> RichText(inline(b.text), body)
                 is Block.Heading -> RichText(
@@ -297,7 +299,10 @@ fun Markdown(text: String, modifier: Modifier = Modifier, color: Color = C.text,
                     )
                     RichText(inline(b.text), body, Modifier.weight(1f))
                 }
-                is Block.Code -> Box(
+                // ```visual Title: an interactive card (Intelligent UI), not code.
+                is Block.Code -> if (b.lang.substringBefore(' ').equals("visual", ignoreCase = true)) {
+                    VisualCard(b.lang.substringAfter(' ', "").trim(), b.text, b.closed)
+                } else Box(
                     Modifier.fillMaxWidth()
                         .background(C.code, RoundedCornerShape(Radius.sm))
                         .border(1.dp, C.line, RoundedCornerShape(Radius.sm)),
@@ -351,7 +356,7 @@ fun Markdown(text: String, modifier: Modifier = Modifier, color: Color = C.text,
                 }
                 Block.Rule -> Box(Modifier.fillMaxWidth().height(1.dp).background(C.line))
             }
-        }
+        } }
     }
 }
 

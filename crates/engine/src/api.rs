@@ -460,6 +460,7 @@ pub fn router(state: AppState) -> Router {
 
     Router::new()
         .route("/health", get(health))
+        .route("/visual", get(visual_frame))
         .nest("/v1", v1)
         // Clients are authenticated by token, not cookies, so any origin may
         // call the API (the UI dev server, the desktop webview, ...).
@@ -504,6 +505,27 @@ impl<E: Into<anyhow::Error>> From<E> for ApiError {
 }
 
 // ---- health & status ------------------------------------------------------
+
+/// The frame the desktop app runs visual cards in (Intelligent UI). Its own pages
+/// get the app's strict CSP, which would block a visual's inline scripts, so the
+/// frame comes from here, with a policy of its own: inline code yes, no network,
+/// and always a sandbox (an opaque origin, so a visual can't call this API even if
+/// the page is opened some other way). The same file is served by the relay.
+async fn visual_frame() -> Response {
+    let mut response = include_str!("../../../app/public/visual.html").into_response();
+    let headers = response.headers_mut();
+    headers.insert(axum::http::header::CONTENT_TYPE, axum::http::HeaderValue::from_static("text/html; charset=utf-8"));
+    headers.insert(axum::http::header::X_CONTENT_TYPE_OPTIONS, axum::http::HeaderValue::from_static("nosniff"));
+    headers.insert(axum::http::header::REFERRER_POLICY, axum::http::HeaderValue::from_static("no-referrer"));
+    headers.insert(
+        axum::http::header::CONTENT_SECURITY_POLICY,
+        axum::http::HeaderValue::from_static(
+            "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; \
+             img-src data: blob:; font-src data:; media-src data: blob:; form-action 'none'; base-uri 'none'",
+        ),
+    );
+    response
+}
 
 async fn health(
     State(st): State<AppState>,

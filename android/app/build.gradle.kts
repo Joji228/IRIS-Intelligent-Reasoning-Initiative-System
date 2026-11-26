@@ -10,14 +10,17 @@ android {
     namespace = "dev.iris.app"
     compileSdk = 37
 
+    // The frame visual cards run in (app/public/visual.html) is shared with the web app.
+    sourceSets["main"].assets.srcDir("../../app/public")
+
     defaultConfig {
         applicationId = "dev.iris.app"
         minSdk = 29
         targetSdk = 36
         // versionCode only ever goes up (Android refuses to install a lower one over the
         // app already on the phone); versionName is what the user sees.
-        versionCode = 22
-        versionName = "0.3.9"
+        versionCode = 23
+        versionName = "0.3.10"
     }
 
     // Release signing comes from keystore.properties next to this folder's settings file,

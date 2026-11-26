@@ -1,0 +1,112 @@
+<!doctype html>
+<!--
+  The frame a visual card in a reply runs in (Intelligent UI). The apps load this page
+  in a sandbox and send it the visual's HTML; it writes that HTML into itself with the
+  I.R.I.S. style kit, then reports its height (and errors) back.
+
+  The visual is written by the model, so it is untrusted:
+  - web and desktop: an <iframe sandbox="allow-scripts"> (an opaque origin: no access
+    to the app's storage, token or DOM), and this page's own CSP allows no network;
+  - Android: a WebView with network loads blocked.
+  This page refuses to run anywhere else (opened directly or framed without a sandbox).
+  The same file is served by the relay (/visual.html), the engine (/visual, for the
+  desktop app) and packed into the Android app.
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:">
+<script>
+(function () {
+  var host = window.IrisHost; // the Android app's bridge
+  if (!host && (window.origin !== 'null' || window.parent === window)) return;
+  function post(m) {
+    if (host) host.post(JSON.stringify(m));
+    else window.parent.postMessage(m, '*');
+  }
+
+  var KIT = [
+    '*{box-sizing:border-box}',
+    'html,body{margin:0;background:transparent;color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}',
+    'body{padding:14px;overflow-wrap:anywhere}',
+    'h1,h2,h3,h4{margin:0 0 8px;font-weight:600;line-height:1.3}h1{font-size:20px}h2{font-size:17px}h3,h4{font-size:15px}',
+    'p{margin:0 0 8px}p:last-child{margin-bottom:0}ul,ol{margin:0 0 8px;padding-left:20px}',
+    'a{color:var(--accent-hi)}',
+    '.muted{color:var(--muted)}.faint{color:var(--faint)}.accent{color:var(--accent-hi)}.good{color:var(--success)}.bad{color:var(--danger)}.warn{color:var(--warn)}',
+    '.small{font-size:13px}.big{font-size:22px;font-weight:600}',
+    '.card{background:var(--elevated);border-radius:14px;padding:12px 14px}',
+    '.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.col{display:flex;flex-direction:column;gap:10px}.spread{justify-content:space-between}',
+    '.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}',
+    '.stat{background:var(--elevated);border-radius:14px;padding:12px 14px}.stat .value{font-size:24px;font-weight:600;line-height:1.2}.stat .label{font-size:12.5px;color:var(--muted)}',
+    'button,.btn{font:inherit;font-size:14px;color:var(--text);background:var(--hover);border:0;border-radius:999px;padding:8px 14px;cursor:pointer;-webkit-tap-highlight-color:transparent}',
+    'button.primary,.btn.primary{background:var(--accent);color:#fff}button.active{background:var(--accent-soft);color:var(--accent-hi)}',
+    'button:active{opacity:.7}button:disabled{opacity:.4}',
+    'input,select,textarea{font:inherit;font-size:14px;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 10px;max-width:100%}',
+    'input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:28px;padding:0;border:0;background:transparent}',
+    'input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:99px;background:rgba(127,127,150,.3)}',
+    'input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;margin-top:-7px;border:0;border-radius:50%;background:var(--accent)}',
+    'input[type=range]::-moz-range-track{height:6px;border-radius:99px;background:rgba(127,127,150,.3)}',
+    'input[type=range]::-moz-range-thumb{width:20px;height:20px;border:0;border-radius:50%;background:var(--accent)}',
+    'input[type=checkbox],input[type=radio]{accent-color:var(--accent);width:18px;height:18px;vertical-align:middle}',
+    'label{display:inline-flex;gap:8px;align-items:center}',
+    'table{border-collapse:collapse;width:100%;font-size:14px}th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-weight:500}tr:last-child td{border-bottom:0}',
+    '.bar{height:8px;border-radius:99px;background:var(--hover);overflow:hidden}.bar>i{display:block;height:100%;background:var(--accent);border-radius:99px;transition:width .3s}',
+    '.chip{display:inline-block;font-size:12.5px;padding:3px 10px;border-radius:99px;background:var(--accent-soft);color:var(--accent-hi)}',
+    'hr{border:0;border-top:1px solid var(--line);margin:12px 0}',
+    'svg{max-width:100%;height:auto}svg text{fill:var(--muted);font-family:inherit}',
+    'code,.mono{font-family:ui-monospace,Consolas,monospace;font-size:.92em}'
+  ].join('\n');
+
+  // What runs inside the visual before its own code: size and error reports, and
+  // `iris` (the theme, for scripts that draw).
+  function runtime() {
+    var host = window.IrisHost;
+    function post(m) {
+      if (host) host.post(JSON.stringify(m));
+      else window.parent.postMessage(m, '*');
+    }
+    window.addEventListener('error', function (e) {
+      post({ type: 'error', message: String((e && e.message) || 'error').slice(0, 300) });
+    });
+    var last = -1;
+    function size() {
+      var b = document.body;
+      if (!b) return;
+      var h = Math.ceil(b.getBoundingClientRect().height);
+      if (h !== last) { last = h; post({ type: 'size', height: h }); }
+    }
+    document.addEventListener('DOMContentLoaded', function () {
+      size();
+      if (window.ResizeObserver) new ResizeObserver(size).observe(document.body);
+    });
+    window.addEventListener('load', size);
+  }
+
+  function onMessage(e) {
+    if (!host && e.source !== window.parent) return;
+    var d = e.data;
+    if (typeof d === 'string') { try { d = JSON.parse(d); } catch (_) { return; } }
+    if (!d || d.type !== 'render' || typeof d.html !== 'string') return;
+    window.removeEventListener('message', onMessage);
+    var t = d.theme || {};
+    var vars = Object.keys(t).filter(function (k) { return /^[a-z-]+$/.test(k) && k !== 'scheme'; })
+      .map(function (k) { return '--' + k + ':' + String(t[k]).replace(/[;{}<]/g, ''); }).join(';');
+    var scheme = t.scheme === 'light' ? 'light' : 'dark';
+    var theme = JSON.stringify(t).replace(/</g, '\\u003c');
+    document.open();
+    document.write(
+      '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<style>:root{color-scheme:' + scheme + ';' + vars + '}\n' + KIT + '</style>' +
+      '<script>(' + runtime.toString() + ')();window.iris={theme:' + theme + '};<\/script>' +
+      '</head><body>' + d.html + '</body></html>'
+    );
+    document.close();
+  }
+  window.addEventListener('message', onMessage);
+  post({ type: 'ready' });
+})();
+</script>
+</head>
+<body></body>
+</html>

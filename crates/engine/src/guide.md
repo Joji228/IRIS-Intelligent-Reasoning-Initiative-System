@@ -18,6 +18,7 @@ I.R.I.S. (Intelligent Reasoning & Initiative System) is a self-hosted team of AI
 - An agent's tool steps (commands, files, searches) are folded into one card per reply with a tally; click it to see every step. Tasks Iris hands an agent appear as a "Task from Iris" card.
 - Search all chats: the search button in the sidebar, or Ctrl+K on desktop.
 - Questions from an agent appear as a card with choices; picking one answers it.
+- Visuals (Intelligent UI): when a chart, comparison or small tool explains something better than text, a reply can include an interactive visual card. It runs in a sandbox with no internet access. The code button shows its HTML, the expand button opens it full screen. Voice calls stay text only.
 
 ## Thinking effort
 - How hard an agent thinks: a slider with Off, Low, Medium, High and Max, plus an Auto pill (the model decides). Higher levels answer more carefully but are slower and use more tokens.

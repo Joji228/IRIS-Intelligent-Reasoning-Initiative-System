@@ -47,6 +47,8 @@ object Lucide {
     val Plus get() = icon("plus", "M5 12h14", "M12 5v14")
     val Check get() = icon("check", "M20 6 9 17l-5-5")
     val X get() = icon("x", "M18 6 6 18", "m6 6 12 12")
+    val Code get() = icon("code", "m16 18 6-6-6-6", "m8 6-6 6 6 6")
+    val Maximize get() = icon("maximize-2", "M15 3h6v6", "m21 3-7 7", "m3 21 7-7", "M9 21H3v-6")
     private const val SHIELD =
         "M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"
     val ShieldAlert get() = icon("shield-alert", SHIELD, "M12 8v4", "M12 16h.01")

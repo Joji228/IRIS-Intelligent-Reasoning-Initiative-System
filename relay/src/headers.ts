@@ -27,3 +27,28 @@ export function securityHeaders(host: string, secure = true): Record<string, str
     'Referrer-Policy': 'no-referrer',
   };
 }
+
+// The frame visual cards run in (public/visual.html). A visual is a small page the
+// model wrote, so it gets its own policy: inline scripts and styles yes, nothing from
+// the network, and only the web app may frame it. The app loads it in a sandbox
+// (an opaque origin), so it can't reach the app's storage either.
+export function visualFrameHeaders(): Record<string, string> {
+  const csp = [
+    // Always an opaque origin, even if someone opens or frames it without a sandbox.
+    'sandbox allow-scripts',
+    "default-src 'none'",
+    "script-src 'unsafe-inline'",
+    "style-src 'unsafe-inline'",
+    'img-src data: blob:',
+    'font-src data:',
+    'media-src data: blob:',
+    "form-action 'none'",
+    "base-uri 'none'",
+    "frame-ancestors 'self'",
+  ].join('; ');
+  return {
+    'Content-Security-Policy': csp,
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'no-referrer',
+  };
+}

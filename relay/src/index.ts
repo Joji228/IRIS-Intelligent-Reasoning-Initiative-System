@@ -17,7 +17,7 @@
 // expect. It's as trustworthy as the web app itself, which this relay serves.
 
 import { DurableObject } from 'cloudflare:workers';
-import { securityHeaders } from './headers';
+import { securityHeaders, visualFrameHeaders } from './headers';
 
 interface Env {
   HUB: DurableObjectNamespace<Hub>;
@@ -53,7 +53,9 @@ export default {
     // Everything else: the web app (static files), with security headers.
     const res = await env.ASSETS.fetch(req);
     const headers = new Headers(res.headers);
-    for (const [name, value] of Object.entries(securityHeaders(url.host, url.protocol === 'https:'))) headers.set(name, value);
+    const policy = url.pathname === '/visual.html' ? visualFrameHeaders() : securityHeaders(url.host, url.protocol === 'https:');
+    if (url.pathname === '/visual.html') headers.delete('X-Frame-Options');
+    for (const [name, value] of Object.entries(policy)) headers.set(name, value);
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
   },
 };

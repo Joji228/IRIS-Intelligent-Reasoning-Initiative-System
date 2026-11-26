@@ -2,9 +2,12 @@
   import { openUrl } from '@tauri-apps/plugin-opener';
   import { inDesktopApp } from '../connection';
   import { renderMarkdown } from '../markdown';
+  import { splitVisuals } from '../visual';
+  import Visual from './Visual.svelte';
 
   let { text }: { text: string } = $props();
-  const html = $derived(renderMarkdown(text));
+  // ```visual blocks become cards; the rest is Markdown. Most replies are one part.
+  const parts = $derived(splitVisuals(text).map((p) => (p.kind === 'md' ? { ...p, html: renderMarkdown(p.text) } : p)));
 
   // Copy buttons in code blocks, and links that open in the real browser
   // instead of navigating the app window.
@@ -29,4 +32,14 @@
 </script>
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-<div class="md selectable" {onclick}>{@html html}</div>
+<div class="md selectable" {onclick}>
+  {#each parts as part, i (i)}
+    {#if part.kind === 'md'}
+      {@html part.html}
+    {:else}
+      {#key part.closed ? part.html : ''}
+        <Visual title={part.title} html={part.html} closed={part.closed} />
+      {/key}
+    {/if}
+  {/each}
+</div>
